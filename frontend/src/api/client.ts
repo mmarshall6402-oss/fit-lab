@@ -1,10 +1,14 @@
 import type {
   Category,
+  CommentDto,
+  CreateCommentRequest,
   CreateItemRequest,
   FullRecommendationDto,
   ItemDto,
   OutfitDto,
   RecommendationDto,
+  SaveOutfitRequest,
+  SavedOutfitDto,
 } from '../types'
 
 export class ApiError extends Error {}
@@ -58,4 +62,16 @@ export const api = {
 
   scoreOutfit: (shirtId: string, bottomId: string, shoesId: string) =>
     request<OutfitDto>(`/outfit/score?shirtId=${shirtId}&bottomId=${bottomId}&shoesId=${shoesId}`),
+
+  saveOutfit: (request_: SaveOutfitRequest) =>
+    request<SavedOutfitDto>('/fits', { method: 'POST', body: JSON.stringify(request_) }),
+
+  listSavedOutfits: () => request<SavedOutfitDto[]>('/fits'),
+
+  likeSavedOutfit: (id: string) => request<SavedOutfitDto>(`/fits/${id}/like`, { method: 'POST' }),
+
+  listComments: (id: string) => request<CommentDto[]>(`/fits/${id}/comments`),
+
+  addComment: (id: string, comment: CreateCommentRequest) =>
+    request<CommentDto>(`/fits/${id}/comments`, { method: 'POST', body: JSON.stringify(comment) }),
 }

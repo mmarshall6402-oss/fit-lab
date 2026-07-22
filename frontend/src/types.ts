@@ -43,3 +43,39 @@ export type Slots = {
   BOTTOM: ItemDto | null
   SHOES: ItemDto | null
 }
+
+export interface SaveOutfitRequest {
+  shirtId: string
+  bottomId: string
+  shoesId: string
+}
+
+export interface SavedOutfitDto {
+  id: string
+  shirtId: string
+  shirtName: string
+  shirtImageUrl: string | null
+  bottomId: string
+  bottomName: string
+  bottomImageUrl: string | null
+  shoesId: string
+  shoesName: string
+  shoesImageUrl: string | null
+  score: number
+  reasons: string[]
+  likeCount: number
+  commentCount: number
+  createdAt: string
+}
+
+export interface CommentDto {
+  id: string
+  author: string
+  body: string
+  createdAt: string
+}
+
+export interface CreateCommentRequest {
+  body: string
+  author?: string
+}

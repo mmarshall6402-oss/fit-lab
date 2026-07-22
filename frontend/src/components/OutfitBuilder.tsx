@@ -11,10 +11,13 @@ interface Props {
   scoring: boolean
   building: boolean
   error: string | null
+  saving: boolean
+  saved: boolean
   onClear: (category: Category) => void
   onSetAnchor: (category: Category) => void
   onPick: (item: ItemDto) => void
   onGenerate: () => void
+  onSave: () => void
 }
 
 export function OutfitBuilder({
@@ -24,10 +27,13 @@ export function OutfitBuilder({
   scoring,
   building,
   error,
+  saving,
+  saved,
   onClear,
   onSetAnchor,
   onPick,
   onGenerate,
+  onSave,
 }: Props) {
   const filledCount = CATEGORIES.filter((c) => slots[c]).length
   const anchorItem = anchorCategory ? slots[anchorCategory] : null
@@ -65,6 +71,16 @@ export function OutfitBuilder({
       )}
 
       <ScorePanel outfit={outfit} loading={scoring} />
+
+      {outfit && (
+        <button
+          onClick={onSave}
+          disabled={saving || saved}
+          className="rounded-md border border-accent/40 py-2 text-sm font-bold uppercase tracking-widest text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+        >
+          {saved ? 'Saved to gallery ✓' : saving ? 'Saving…' : 'Save to gallery'}
+        </button>
+      )}
 
       {anchorItem &&
         emptyCategories.map((category) => (

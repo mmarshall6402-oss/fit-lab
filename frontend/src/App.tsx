@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useCatalog } from './hooks/useCatalog'
 import { api } from './api/client'
 import { CATEGORIES, type Category, type ItemDto, type OutfitDto, type Slots } from './types'
-import { Header } from './components/Header'
+import { Header, type View } from './components/Header'
 import { CatalogPanel } from './components/CatalogPanel'
 import { OutfitBuilder } from './components/OutfitBuilder'
+import { GalleryPanel } from './components/GalleryPanel'
 
 const EMPTY_SLOTS: Slots = { SHIRT: null, BOTTOM: null, SHOES: null }
 
@@ -15,6 +16,7 @@ function pickDefaultAnchor(slots: Slots): Category | null {
 export default function App() {
   const { items, loading, error, createItem, deleteItem, uploadImage } = useCatalog()
 
+  const [view, setView] = useState<View>('builder')
   const [activeCategory, setActiveCategory] = useState<Category>('SHIRT')
   const [slots, setSlots] = useState<Slots>(EMPTY_SLOTS)
   const [pinnedAnchor, setPinnedAnchor] = useState<Category | null>(null)
@@ -22,6 +24,8 @@ export default function App() {
   const [scoring, setScoring] = useState(false)
   const [building, setBuilding] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const anchorCategory = useMemo(
     () => (pinnedAnchor && slots[pinnedAnchor] ? pinnedAnchor : pickDefaultAnchor(slots)),
@@ -69,12 +73,14 @@ export default function App() {
   function handlePick(item: ItemDto) {
     setSlots((prev) => ({ ...prev, [item.category]: item }))
     setBuildError(null)
+    setSaved(false)
   }
 
   function handleClear(category: Category) {
     setSlots((prev) => ({ ...prev, [category]: null }))
     if (pinnedAnchor === category) setPinnedAnchor(null)
     setBuildError(null)
+    setSaved(false)
   }
 
   function handleSetAnchor(category: Category) {
@@ -92,6 +98,7 @@ export default function App() {
       setSlots({ SHIRT: result.shirt, BOTTOM: result.bottom, SHOES: result.shoes })
       setOutfit(result)
       setPinnedAnchor(anchorCategory)
+      setSaved(false)
     } catch (err) {
       setBuildError(err instanceof Error ? err.message : 'Could not build an outfit from the catalog.')
     } finally {
@@ -99,34 +106,58 @@ export default function App() {
     }
   }
 
+  async function handleSave() {
+    const { SHIRT, BOTTOM, SHOES } = slots
+    if (!SHIRT || !BOTTOM || !SHOES) return
+    setSaving(true)
+    setBuildError(null)
+    try {
+      await api.saveOutfit({ shirtId: SHIRT.id, bottomId: BOTTOM.id, shoesId: SHOES.id })
+      setSaved(true)
+    } catch (err) {
+      setBuildError(err instanceof Error ? err.message : 'Could not save this fit.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="min-h-screen">
-      <Header />
+      <Header view={view} onViewChange={setView} />
       <main className="mx-auto flex max-w-6xl flex-col gap-8 p-4 sm:p-8 lg:flex-row">
-        <CatalogPanel
-          items={items}
-          loading={loading}
-          error={error}
-          slots={slots}
-          activeCategory={activeCategory}
-          onActiveCategoryChange={setActiveCategory}
-          onSelect={handlePick}
-          onDelete={deleteItem}
-          onCreate={createItem}
-          onUploadImage={uploadImage}
-        />
-        <OutfitBuilder
-          slots={slots}
-          anchorCategory={anchorCategory}
-          outfit={outfit}
-          scoring={scoring}
-          building={building}
-          error={buildError}
-          onClear={handleClear}
-          onSetAnchor={handleSetAnchor}
-          onPick={handlePick}
-          onGenerate={handleGenerate}
-        />
+        {view === 'builder' ? (
+          <>
+            <CatalogPanel
+              items={items}
+              loading={loading}
+              error={error}
+              slots={slots}
+              activeCategory={activeCategory}
+              onActiveCategoryChange={setActiveCategory}
+              onSelect={handlePick}
+              onDelete={deleteItem}
+              onCreate={createItem}
+              onUploadImage={uploadImage}
+            />
+            <OutfitBuilder
+              slots={slots}
+              anchorCategory={anchorCategory}
+              outfit={outfit}
+              scoring={scoring}
+              building={building}
+              error={buildError}
+              saving={saving}
+              saved={saved}
+              onClear={handleClear}
+              onSetAnchor={handleSetAnchor}
+              onPick={handlePick}
+              onGenerate={handleGenerate}
+              onSave={handleSave}
+            />
+          </>
+        ) : (
+          <GalleryPanel />
+        )}
       </main>
     </div>
   )

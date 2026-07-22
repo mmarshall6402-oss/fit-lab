@@ -4,6 +4,8 @@ import { CATEGORIES } from '../types'
 import { ItemCard } from './ItemCard'
 import { CategoryIcon } from './CategoryIcon'
 import { AddItemModal } from './AddItemModal'
+import { SearchInput } from './SearchInput'
+import { matchesItem } from '../search'
 
 interface Props {
   items: ItemDto[]
@@ -31,7 +33,8 @@ export function CatalogPanel({
   onUploadImage,
 }: Props) {
   const [showAddModal, setShowAddModal] = useState(false)
-  const visible = items.filter((i) => i.category === activeCategory)
+  const [query, setQuery] = useState('')
+  const visible = items.filter((i) => i.category === activeCategory && matchesItem(i, query))
 
   function handleDelete(item: ItemDto) {
     if (window.confirm(`Delete "${item.name}"? This can't be undone.`)) {
@@ -69,6 +72,8 @@ export function CatalogPanel({
         ))}
       </div>
 
+      <SearchInput value={query} onChange={setQuery} placeholder="Search by name, color, or vibe…" />
+
       {error && (
         <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
@@ -83,7 +88,9 @@ export function CatalogPanel({
         </div>
       ) : visible.length === 0 ? (
         <p className="rounded-lg border border-dashed border-white/15 py-10 text-center text-sm text-neutral-500">
-          No {activeCategory.toLowerCase()}s yet — add one to get started.
+          {query
+            ? `No ${activeCategory.toLowerCase()}s match "${query}".`
+            : `No ${activeCategory.toLowerCase()}s yet — add one to get started.`}
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
