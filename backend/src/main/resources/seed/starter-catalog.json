@@ -1,0 +1,87 @@
+[
+  {
+    "id": "ignored-on-import-1",
+    "name": "Distressed Graphic Tee",
+    "category": "SHIRT",
+    "imageUrl": null,
+    "colors": ["black", "white"],
+    "vibes": ["street", "loud"]
+  },
+  {
+    "name": "Oversized Flannel",
+    "category": "SHIRT",
+    "imageUrl": null,
+    "colors": ["red", "black"],
+    "vibes": ["grunge", "loud"]
+  },
+  {
+    "name": "Plain White Tee",
+    "category": "SHIRT",
+    "imageUrl": null,
+    "colors": ["white"],
+    "vibes": ["clean", "minimal"]
+  },
+  {
+    "name": "Tie-Dye Longsleeve",
+    "category": "SHIRT",
+    "imageUrl": null,
+    "colors": ["blue", "orange", "white"],
+    "vibes": ["loud", "street"]
+  },
+  {
+    "name": "Cargo Pants",
+    "category": "BOTTOM",
+    "imageUrl": null,
+    "colors": ["black"],
+    "vibes": ["street", "utility"]
+  },
+  {
+    "name": "Baggy Denim Jeans",
+    "category": "BOTTOM",
+    "imageUrl": null,
+    "colors": ["blue"],
+    "vibes": ["street", "grunge"]
+  },
+  {
+    "name": "Tailored Chinos",
+    "category": "BOTTOM",
+    "imageUrl": null,
+    "colors": ["beige"],
+    "vibes": ["clean", "minimal"]
+  },
+  {
+    "name": "Track Pants",
+    "category": "BOTTOM",
+    "imageUrl": null,
+    "colors": ["black", "white"],
+    "vibes": ["street", "sporty"]
+  },
+  {
+    "name": "Classic Chuck Sneakers",
+    "category": "SHOES",
+    "imageUrl": null,
+    "colors": ["black", "white"],
+    "vibes": ["street", "minimal"]
+  },
+  {
+    "name": "Chunky Dad Sneakers",
+    "category": "SHOES",
+    "imageUrl": null,
+    "colors": ["white", "grey"],
+    "vibes": ["loud", "sporty"]
+  },
+  {
+    "name": "Combat Boots",
+    "category": "SHOES",
+    "imageUrl": null,
+    "colors": ["black"],
+    "vibes": ["grunge", "street"]
+  },
+  {
+    "name": "Minimal Leather Sneakers",
+    "category": "SHOES",
+    "imageUrl": null,
+    "colors": ["white"],
+    "vibes": ["clean", "minimal"]
+  }
+]
