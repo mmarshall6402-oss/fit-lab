@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, resolveUrl } from '../api/client'
 import type { Category, ItemDto, RecommendationDto } from '../types'
 import { CategoryIcon } from './CategoryIcon'
 
@@ -44,7 +44,7 @@ export function RecommendationStrip({ anchor, category, onPick }: Props) {
           >
             <div className="flex h-14 w-full items-center justify-center overflow-hidden rounded bg-black/40">
               {item.imageUrl ? (
-                <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                <img src={resolveUrl(item.imageUrl)!} alt={item.name} className="h-full w-full object-cover" />
               ) : (
                 <CategoryIcon category={category} className="h-6 w-6 text-neutral-600" />
               )}

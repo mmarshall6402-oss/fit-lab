@@ -9,8 +9,16 @@ import type {
 
 export class ApiError extends Error {}
 
+const API_BASE = window.__FITLAB_API_BASE__ ?? ''
+
+/** Prefixes a backend-relative path (e.g. an item's imageUrl) with the configured API base. */
+export function resolveUrl(path: string | null): string | null {
+  if (!path) return path
+  return path.startsWith('http') ? path : `${API_BASE}${path}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: init?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
     ...init,
   })

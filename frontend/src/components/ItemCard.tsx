@@ -1,6 +1,7 @@
 import type { ItemDto } from '../types'
 import { ColorTag, VibeTag } from './Tag'
 import { CategoryIcon } from './CategoryIcon'
+import { resolveUrl } from '../api/client'
 
 interface Props {
   item: ItemDto
@@ -24,7 +25,7 @@ export function ItemCard({ item, selected, score, onSelect, onDelete }: Props) {
       >
         <div className="flex aspect-square items-center justify-center overflow-hidden bg-black/40">
           {item.imageUrl ? (
-            <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+            <img src={resolveUrl(item.imageUrl)!} alt={item.name} className="h-full w-full object-cover" />
           ) : (
             <CategoryIcon category={item.category} className="h-10 w-10 text-neutral-600" />
           )}

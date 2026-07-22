@@ -1,6 +1,7 @@
 import type { Category, ItemDto } from '../types'
 import { CategoryIcon } from './CategoryIcon'
 import { ColorTag, VibeTag } from './Tag'
+import { resolveUrl } from '../api/client'
 
 interface Props {
   category: Category
@@ -31,7 +32,7 @@ export function OutfitSlot({ category, item, isAnchor, onClear, onSetAnchor }: P
     >
       <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/40">
         {item.imageUrl ? (
-          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+          <img src={resolveUrl(item.imageUrl)!} alt={item.name} className="h-full w-full object-cover" />
         ) : (
           <CategoryIcon category={category} className="h-6 w-6 text-neutral-600" />
         )}
