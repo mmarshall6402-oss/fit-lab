@@ -63,6 +63,29 @@ public class OutfitService {
         );
     }
 
+    /** Scores a specific user-picked triple (manual mix-and-match), rather than searching the catalog. */
+    public OutfitDto score(UUID shirtId, UUID bottomId, UUID shoesId) {
+        Item shirt = getByCategory(shirtId, Category.SHIRT);
+        Item bottom = getByCategory(bottomId, Category.BOTTOM);
+        Item shoes = getByCategory(shoesId, Category.SHOES);
+
+        return new OutfitDto(
+                ItemDto.from(shirt),
+                ItemDto.from(bottom),
+                ItemDto.from(shoes),
+                scoringService.holisticScore(shirt, bottom, shoes),
+                scoringService.reasons(shirt, bottom, shoes)
+        );
+    }
+
+    private Item getByCategory(UUID id, Category expected) {
+        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+        if (item.getCategory() != expected) {
+            throw new IllegalArgumentException(expected + " id does not refer to a " + expected + " item: " + id);
+        }
+        return item;
+    }
+
     private List<Item> candidatesFor(Category category, Item anchor) {
         List<Item> candidates = anchor.getCategory() == category
                 ? List.of(anchor)

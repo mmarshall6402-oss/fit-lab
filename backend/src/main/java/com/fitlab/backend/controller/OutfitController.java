@@ -21,4 +21,9 @@ public class OutfitController {
     public OutfitDto build(@RequestParam UUID anchorId) {
         return outfitService.buildBest(anchorId);
     }
+
+    @GetMapping("/outfit/score")
+    public OutfitDto score(@RequestParam UUID shirtId, @RequestParam UUID bottomId, @RequestParam UUID shoesId) {
+        return outfitService.score(shirtId, bottomId, shoesId);
+    }
 }

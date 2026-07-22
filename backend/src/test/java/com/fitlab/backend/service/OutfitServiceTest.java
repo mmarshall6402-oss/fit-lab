@@ -75,4 +75,36 @@ class OutfitServiceTest {
         assertThatThrownBy(() -> outfitService.buildBest(anchorShirt.getId()))
                 .isInstanceOf(InsufficientCatalogException.class);
     }
+
+    @Test
+    void scoresAnArbitraryUserPickedTriple() {
+        Item shirt = item("shirt", Category.SHIRT, Set.of("black", "red"), Set.of("street"));
+        Item bottom = item("bottom", Category.BOTTOM, Set.of("black", "red"), Set.of("street"));
+        Item shoes = item("shoes", Category.SHOES, Set.of("black", "red"), Set.of("street"));
+        OutfitService outfitService = new OutfitService(itemRepository, scoringService);
+        when(itemRepository.findById(shirt.getId())).thenReturn(Optional.of(shirt));
+        when(itemRepository.findById(bottom.getId())).thenReturn(Optional.of(bottom));
+        when(itemRepository.findById(shoes.getId())).thenReturn(Optional.of(shoes));
+
+        OutfitDto result = outfitService.score(shirt.getId(), bottom.getId(), shoes.getId());
+
+        assertThat(result.shirt().id()).isEqualTo(shirt.getId());
+        assertThat(result.bottom().id()).isEqualTo(bottom.getId());
+        assertThat(result.shoes().id()).isEqualTo(shoes.getId());
+        assertThat(result.score()).isEqualTo(100.0);
+    }
+
+    @Test
+    void scoreRejectsAnIdFromTheWrongCategory() {
+        Item shirt = item("shirt", Category.SHIRT, Set.of("black"), Set.of("street"));
+        Item anotherShirt = item("another shirt", Category.SHIRT, Set.of("black"), Set.of("street"));
+        Item shoes = item("shoes", Category.SHOES, Set.of("black"), Set.of("street"));
+        OutfitService outfitService = new OutfitService(itemRepository, scoringService);
+        when(itemRepository.findById(shirt.getId())).thenReturn(Optional.of(shirt));
+        when(itemRepository.findById(anotherShirt.getId())).thenReturn(Optional.of(anotherShirt));
+
+        // passing a SHIRT id where a BOTTOM id is expected
+        assertThatThrownBy(() -> outfitService.score(shirt.getId(), anotherShirt.getId(), shoes.getId()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
