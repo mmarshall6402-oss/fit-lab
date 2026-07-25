@@ -12,6 +12,7 @@ export default defineConfig({
       '/recommend': backend,
       '/outfit': backend,
       '/uploads': backend,
+      '/seed-images': backend,
     },
   },
 })
