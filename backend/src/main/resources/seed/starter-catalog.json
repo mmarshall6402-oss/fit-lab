@@ -4,84 +4,978 @@
     "name": "Distressed Graphic Tee",
     "category": "SHIRT",
     "imageUrl": null,
-    "colors": ["black", "white"],
-    "vibes": ["street", "loud"]
+    "colors": [
+      "black",
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "loud"
+    ]
   },
   {
     "name": "Oversized Flannel",
     "category": "SHIRT",
     "imageUrl": null,
-    "colors": ["red", "black"],
-    "vibes": ["grunge", "loud"]
+    "colors": [
+      "red",
+      "black"
+    ],
+    "vibes": [
+      "grunge",
+      "loud"
+    ]
   },
   {
     "name": "Plain White Tee",
     "category": "SHIRT",
     "imageUrl": null,
-    "colors": ["white"],
-    "vibes": ["clean", "minimal"]
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "clean",
+      "minimal"
+    ]
   },
   {
     "name": "Tie-Dye Longsleeve",
     "category": "SHIRT",
     "imageUrl": null,
-    "colors": ["blue", "orange", "white"],
-    "vibes": ["loud", "street"]
+    "colors": [
+      "blue",
+      "orange",
+      "white"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
   },
   {
     "name": "Cargo Pants",
     "category": "BOTTOM",
     "imageUrl": null,
-    "colors": ["black"],
-    "vibes": ["street", "utility"]
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "street",
+      "utility"
+    ]
   },
   {
     "name": "Baggy Denim Jeans",
     "category": "BOTTOM",
     "imageUrl": null,
-    "colors": ["blue"],
-    "vibes": ["street", "grunge"]
+    "colors": [
+      "blue"
+    ],
+    "vibes": [
+      "street",
+      "grunge"
+    ]
   },
   {
     "name": "Tailored Chinos",
     "category": "BOTTOM",
     "imageUrl": null,
-    "colors": ["beige"],
-    "vibes": ["clean", "minimal"]
+    "colors": [
+      "beige"
+    ],
+    "vibes": [
+      "clean",
+      "minimal"
+    ]
   },
   {
     "name": "Track Pants",
     "category": "BOTTOM",
     "imageUrl": null,
-    "colors": ["black", "white"],
-    "vibes": ["street", "sporty"]
+    "colors": [
+      "black",
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "sporty"
+    ]
   },
   {
     "name": "Classic Chuck Sneakers",
     "category": "SHOES",
     "imageUrl": null,
-    "colors": ["black", "white"],
-    "vibes": ["street", "minimal"]
+    "colors": [
+      "black",
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "minimal"
+    ]
   },
   {
     "name": "Chunky Dad Sneakers",
     "category": "SHOES",
     "imageUrl": null,
-    "colors": ["white", "grey"],
-    "vibes": ["loud", "sporty"]
+    "colors": [
+      "white",
+      "grey"
+    ],
+    "vibes": [
+      "loud",
+      "sporty"
+    ]
   },
   {
     "name": "Combat Boots",
     "category": "SHOES",
     "imageUrl": null,
-    "colors": ["black"],
-    "vibes": ["grunge", "street"]
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "grunge",
+      "street"
+    ]
   },
   {
     "name": "Minimal Leather Sneakers",
     "category": "SHOES",
     "imageUrl": null,
-    "colors": ["white"],
-    "vibes": ["clean", "minimal"]
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "clean",
+      "minimal"
+    ]
+  },
+  {
+    "name": "AJ1 Fragment x Travis Scott",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/aj1-fragment-x-travis-scott.png",
+    "colors": [
+      "brown",
+      "khaki"
+    ],
+    "vibes": [
+      "street",
+      "hype"
+    ]
+  },
+  {
+    "name": "AJ3 True Blue",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/aj3-true-blue.png",
+    "colors": [
+      "blue",
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "sporty"
+    ]
+  },
+  {
+    "name": "AJ3 White Cement Reimagined",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/aj3-white-cement-reimagined.png",
+    "colors": [
+      "white",
+      "grey"
+    ],
+    "vibes": [
+      "street",
+      "clean"
+    ]
+  },
+  {
+    "name": "AJ4 Nigel Sylvester Brick By Brick",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/aj4-nigel-sylvester-brick-by-brick.png",
+    "colors": [
+      "brown",
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "utility"
+    ]
+  },
+  {
+    "name": "AJ4 Union Off Noir",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/aj4-union-off-noir.png",
+    "colors": [
+      "black",
+      "grey"
+    ],
+    "vibes": [
+      "street",
+      "grunge"
+    ]
+  },
+  {
+    "name": "AMIRI MMY Bones x Maison Mihara Yasuhiro Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/amiri-mmy-bones-x-maison-mihara-yasuhiro-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "street"
+    ]
+  },
+  {
+    "name": "AMIRI Skel Top Low Black White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/amiri-skel-top-low-black-white.png",
+    "colors": [
+      "black",
+      "white"
+    ],
+    "vibes": [
+      "luxury",
+      "street"
+    ]
+  },
+  {
+    "name": "ASICS Gel-1130 White Pure Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/asics-gel-1130-white-pure-silver.png",
+    "colors": [
+      "white",
+      "silver"
+    ],
+    "vibes": [
+      "sporty",
+      "clean"
+    ]
+  },
+  {
+    "name": "ASICS Gel-NYC Graphite Grey Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/asics-gel-nyc-graphite-grey-black.png",
+    "colors": [
+      "grey",
+      "black"
+    ],
+    "vibes": [
+      "sporty",
+      "street"
+    ]
+  },
+  {
+    "name": "Alexander McQueen Oversized White Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/alexander-mcqueen-oversized-white-black.png",
+    "colors": [
+      "white",
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "clean"
+    ]
+  },
+  {
+    "name": "Alexander McQueen Oversized White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/alexander-mcqueen-oversized-white.png",
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "luxury",
+      "clean",
+      "minimal"
+    ]
+  },
+  {
+    "name": "Amiri MA-1 Black Denim",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/amiri-ma-1-black-denim.png",
+    "colors": [
+      "black",
+      "blue"
+    ],
+    "vibes": [
+      "luxury",
+      "street"
+    ]
+  },
+  {
+    "name": "Balenciaga Runner Black Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-runner-black-silver.png",
+    "colors": [
+      "black",
+      "silver"
+    ],
+    "vibes": [
+      "luxury",
+      "loud",
+      "sporty"
+    ]
+  },
+  {
+    "name": "Balenciaga Runner Grey Green Blue",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-runner-grey-green-blue.png",
+    "colors": [
+      "grey",
+      "green",
+      "blue"
+    ],
+    "vibes": [
+      "luxury",
+      "loud"
+    ]
+  },
+  {
+    "name": "Balenciaga Runner Grey Navy Light Blue",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-runner-grey-navy-light-blue.png",
+    "colors": [
+      "grey",
+      "navy",
+      "blue"
+    ],
+    "vibes": [
+      "luxury",
+      "loud"
+    ]
+  },
+  {
+    "name": "Balenciaga Runner Matte Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-runner-matte-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "minimal",
+      "clean"
+    ]
+  },
+  {
+    "name": "Balenciaga Runner Multicolor",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-runner-multicolor.png",
+    "colors": [
+      "red",
+      "blue",
+      "yellow",
+      "green"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
+  },
+  {
+    "name": "Balenciaga Runner Purple Orange Grey",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-runner-purple-orange-grey.png",
+    "colors": [
+      "purple",
+      "orange",
+      "grey"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
+  },
+  {
+    "name": "Balenciaga Track Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/balenciaga-track-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "sporty",
+      "loud"
+    ]
+  },
+  {
+    "name": "CPFM AF1 Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/cpfm-af1-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "street",
+      "hype"
+    ]
+  },
+  {
+    "name": "CPFM AF1 Fuchsia",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/cpfm-af1-fuchsia.png",
+    "colors": [
+      "pink"
+    ],
+    "vibes": [
+      "street",
+      "loud",
+      "hype"
+    ]
+  },
+  {
+    "name": "CPFM AF1 Moss",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/cpfm-af1-moss.png",
+    "colors": [
+      "green"
+    ],
+    "vibes": [
+      "street",
+      "hype"
+    ]
+  },
+  {
+    "name": "CPFM AF1 White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/cpfm-af1-white.png",
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "clean",
+      "hype"
+    ]
+  },
+  {
+    "name": "Converse One Star Pro Rick Owens DRKSHDW Dark Grey",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/converse-one-star-pro-rick-owens-drkshdw-dark-grey.png",
+    "colors": [
+      "grey",
+      "black"
+    ],
+    "vibes": [
+      "grunge",
+      "street"
+    ]
+  },
+  {
+    "name": "Jordan 11 Retro Gamma Blue (2025)",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-11-retro-gamma-blue-2025.png",
+    "colors": [
+      "black",
+      "blue"
+    ],
+    "vibes": [
+      "street",
+      "sporty"
+    ]
+  },
+  {
+    "name": "Jordan 12 Retro Bloodline",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-12-retro-bloodline.png",
+    "colors": [
+      "red",
+      "black"
+    ],
+    "vibes": [
+      "street",
+      "loud"
+    ]
+  },
+  {
+    "name": "Jordan 14 Retro Black University Blue (2026)",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-14-retro-black-university-blue-2026.png",
+    "colors": [
+      "black",
+      "blue"
+    ],
+    "vibes": [
+      "street",
+      "sporty"
+    ]
+  },
+  {
+    "name": "Jordan 4 Retro Cave Stone",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-4-retro-cave-stone.png",
+    "colors": [
+      "tan",
+      "brown"
+    ],
+    "vibes": [
+      "street",
+      "minimal"
+    ]
+  },
+  {
+    "name": "Jordan 4 Retro Comic",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-4-retro-comic.png",
+    "colors": [
+      "white",
+      "red",
+      "blue",
+      "yellow"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
+  },
+  {
+    "name": "Jordan 4 Retro Lakers",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-4-retro-lakers.png",
+    "colors": [
+      "purple",
+      "yellow"
+    ],
+    "vibes": [
+      "street",
+      "loud"
+    ]
+  },
+  {
+    "name": "Jordan 4 Retro SB Navy",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-4-retro-sb-navy.png",
+    "colors": [
+      "navy",
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "sporty"
+    ]
+  },
+  {
+    "name": "Jordan 4 Retro Toro Bravo",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-4-retro-toro-bravo.png",
+    "colors": [
+      "red",
+      "black"
+    ],
+    "vibes": [
+      "street",
+      "loud"
+    ]
+  },
+  {
+    "name": "Jordan 5 Retro Black University Blue (2026)",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-5-retro-black-university-blue-2026.png",
+    "colors": [
+      "black",
+      "blue"
+    ],
+    "vibes": [
+      "street",
+      "sporty"
+    ]
+  },
+  {
+    "name": "Jordan 5 Retro Fire Red Black Tongue (2025)",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-5-retro-fire-red-black-tongue-2025.png",
+    "colors": [
+      "red",
+      "black"
+    ],
+    "vibes": [
+      "street",
+      "loud"
+    ]
+  },
+  {
+    "name": "Jordan 5 Retro White Metallic (2026)",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/jordan-5-retro-white-metallic-2026.png",
+    "colors": [
+      "white",
+      "silver"
+    ],
+    "vibes": [
+      "street",
+      "clean"
+    ]
+  },
+  {
+    "name": "Lanvin Leather Curb Blue Grey",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/lanvin-leather-curb-blue-grey.png",
+    "colors": [
+      "blue",
+      "grey"
+    ],
+    "vibes": [
+      "luxury",
+      "clean"
+    ]
+  },
+  {
+    "name": "Louis Vuitton LV Trainer White Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/louis-vuitton-lv-trainer-white-black.png",
+    "colors": [
+      "white",
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "street"
+    ]
+  },
+  {
+    "name": "MMY Hank OG Sole Canvas Low Cream",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/mmy-hank-og-sole-canvas-low-cream.png",
+    "colors": [
+      "cream"
+    ],
+    "vibes": [
+      "minimal",
+      "clean"
+    ]
+  },
+  {
+    "name": "MMY Hank OG Sole Canvas Low Red",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/mmy-hank-og-sole-canvas-low-red.png",
+    "colors": [
+      "red"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
+  },
+  {
+    "name": "MMY Peterson 23 OG Sole Canvas White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/mmy-peterson-23-og-sole-canvas-white.png",
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "minimal",
+      "clean"
+    ]
+  },
+  {
+    "name": "MMY Peterson OG Sole Canvas Low Blue",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/mmy-peterson-og-sole-canvas-low-blue.png",
+    "colors": [
+      "blue"
+    ],
+    "vibes": [
+      "clean",
+      "street"
+    ]
+  },
+  {
+    "name": "MMY Peterson OG Sole Canvas Low Pink",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/mmy-peterson-og-sole-canvas-low-pink.png",
+    "colors": [
+      "pink"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
+  },
+  {
+    "name": "MMY Peterson OG Sole Canvas Low Red",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/mmy-peterson-og-sole-canvas-low-red.png",
+    "colors": [
+      "red"
+    ],
+    "vibes": [
+      "loud",
+      "street"
+    ]
+  },
+  {
+    "name": "New Balance 530 Silver Metallic Polka Dots",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/new-balance-530-silver-metallic-polka-dots.png",
+    "colors": [
+      "silver",
+      "white"
+    ],
+    "vibes": [
+      "sporty",
+      "loud"
+    ]
+  },
+  {
+    "name": "Nike Air Force 1 Low Supreme White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/nike-air-force-1-low-supreme-white.png",
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "street",
+      "clean",
+      "hype"
+    ]
+  },
+  {
+    "name": "Nike Mind 001 Slide Black Chrome",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/nike-mind-001-slide-black-chrome.png",
+    "colors": [
+      "black",
+      "silver"
+    ],
+    "vibes": [
+      "sporty",
+      "street"
+    ]
+  },
+  {
+    "name": "Nike P-6000 Metallic Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/nike-p-6000-metallic-silver.png",
+    "colors": [
+      "silver"
+    ],
+    "vibes": [
+      "sporty",
+      "street"
+    ]
+  },
+  {
+    "name": "Onitsuka Tiger Mexico 66 Birch Peacoat",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/onitsuka-tiger-mexico-66-birch-peacoat.png",
+    "colors": [
+      "beige",
+      "navy"
+    ],
+    "vibes": [
+      "clean",
+      "minimal"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Anthracite Gray Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-anthracite-gray-silver.png",
+    "colors": [
+      "grey",
+      "silver"
+    ],
+    "vibes": [
+      "luxury",
+      "clean"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Blue Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-blue-silver.png",
+    "colors": [
+      "blue",
+      "silver"
+    ],
+    "vibes": [
+      "luxury",
+      "clean"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Green Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-green-silver.png",
+    "colors": [
+      "green",
+      "silver"
+    ],
+    "vibes": [
+      "luxury",
+      "clean"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Red Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-red-silver.png",
+    "colors": [
+      "red",
+      "silver"
+    ],
+    "vibes": [
+      "luxury",
+      "loud"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Royal Blue Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-royal-blue-silver.png",
+    "colors": [
+      "blue",
+      "silver"
+    ],
+    "vibes": [
+      "luxury",
+      "clean"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Silver Red",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-silver-red.png",
+    "colors": [
+      "silver",
+      "red"
+    ],
+    "vibes": [
+      "luxury",
+      "loud"
+    ]
+  },
+  {
+    "name": "Prada Americas Cup Soft Rubber Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/prada-americas-cup-soft-rubber-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "minimal",
+      "clean"
+    ]
+  },
+  {
+    "name": "Rick Owens DRKSHDW Vintage Low Black Milk",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/rick-owens-drkshdw-vintage-low-black-milk.png",
+    "colors": [
+      "black",
+      "white"
+    ],
+    "vibes": [
+      "grunge",
+      "minimal"
+    ]
+  },
+  {
+    "name": "Timberland 6 Inch Premium Waterproof Boot Wheat",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/timberland-6-inch-premium-waterproof-boot-wheat.png",
+    "colors": [
+      "tan"
+    ],
+    "vibes": [
+      "utility",
+      "street"
+    ]
+  },
+  {
+    "name": "Vans LX Old Skool 36 Pearlized Vintage Cognac",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/vans-lx-old-skool-36-pearlized-vintage-cognac.png",
+    "colors": [
+      "brown"
+    ],
+    "vibes": [
+      "street",
+      "grunge"
+    ]
+  },
+  {
+    "name": "YZY YS-01 Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/yzy-ys-01-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "minimal",
+      "street",
+      "hype"
+    ]
+  },
+  {
+    "name": "adidas Forum Low Prada White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/adidas-forum-low-prada-white.png",
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "luxury",
+      "clean",
+      "sporty"
+    ]
+  },
+  {
+    "name": "adidas Luna Rossa 21 Prada Core Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/adidas-luna-rossa-21-prada-core-black.png",
+    "colors": [
+      "black"
+    ],
+    "vibes": [
+      "luxury",
+      "sporty"
+    ]
+  },
+  {
+    "name": "adidas Luna Rossa 21 Prada White",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/adidas-luna-rossa-21-prada-white.png",
+    "colors": [
+      "white"
+    ],
+    "vibes": [
+      "luxury",
+      "sporty",
+      "clean"
+    ]
+  },
+  {
+    "name": "adidas Superstar Prada Black",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/adidas-superstar-prada-black.png",
+    "colors": [
+      "black",
+      "white"
+    ],
+    "vibes": [
+      "luxury",
+      "street"
+    ]
+  },
+  {
+    "name": "adidas Superstar Prada Silver",
+    "category": "SHOES",
+    "imageUrl": "/seed-images/adidas-superstar-prada-silver.png",
+    "colors": [
+      "silver",
+      "white"
+    ],
+    "vibes": [
+      "luxury",
+      "street"
+    ]
   }
 ]
