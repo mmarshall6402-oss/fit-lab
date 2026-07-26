@@ -41,6 +41,16 @@ public class ItemService {
     }
 
     @Transactional
+    public ItemDto update(UUID id, CreateItemRequest request) {
+        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+        item.setName(request.name());
+        item.setCategory(request.category());
+        item.setColors(normalize(request.colors()));
+        item.setVibes(normalize(request.vibes()));
+        return ItemDto.from(itemRepository.save(item));
+    }
+
+    @Transactional
     public void delete(UUID id) {
         if (!itemRepository.existsById(id)) {
             throw new ItemNotFoundException(id);

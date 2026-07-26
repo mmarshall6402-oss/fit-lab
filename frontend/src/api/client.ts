@@ -6,9 +6,17 @@ import type {
   ItemDto,
   OutfitDto,
   RecommendationDto,
+  ScoringConfigDto,
 } from '../types'
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
 
 const API_BASE = window.__FITLAB_API_BASE__ ?? ''
 
@@ -19,16 +27,21 @@ export function resolveUrl(path: string | null): string | null {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const baseHeaders: Record<string, string> = init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: init?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
     ...init,
+    headers: { ...baseHeaders, ...(init?.headers as Record<string, string> | undefined) },
   })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new ApiError(body?.error ?? `Request failed: ${res.status}`)
+    throw new ApiError(body?.error ?? `Request failed: ${res.status}`, res.status)
   }
   if (res.status === 204) return undefined as T
   return res.json()
+}
+
+function adminHeaders(token: string): Record<string, string> {
+  return { 'X-Admin-Token': token }
 }
 
 export const api = {
@@ -40,6 +53,9 @@ export const api = {
 
   importItems: (items: CreateItemRequest[]) =>
     request<ItemDto[]>('/items/import', { method: 'POST', body: JSON.stringify(items) }),
+
+  updateItem: (id: string, item: CreateItemRequest) =>
+    request<ItemDto>(`/items/${id}`, { method: 'PUT', body: JSON.stringify(item) }),
 
   deleteItem: (id: string) => request<void>(`/items/${id}`, { method: 'DELETE' }),
 
@@ -70,4 +86,17 @@ export const api = {
 
   scoreOutfit: (shirtId: string, bottomId: string, shoesId: string) =>
     request<OutfitDto>(`/outfit/score?shirtId=${shirtId}&bottomId=${bottomId}&shoesId=${shoesId}`),
+
+  adminGetScoringConfig: (token: string) =>
+    request<ScoringConfigDto>('/admin/scoring-config', { headers: adminHeaders(token) }),
+
+  adminUpdateScoringConfig: (token: string, config: ScoringConfigDto) =>
+    request<ScoringConfigDto>('/admin/scoring-config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+      headers: adminHeaders(token),
+    }),
+
+  adminResetScoringConfig: (token: string) =>
+    request<ScoringConfigDto>('/admin/scoring-config/reset', { method: 'POST', headers: adminHeaders(token) }),
 }

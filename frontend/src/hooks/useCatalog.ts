@@ -29,6 +29,12 @@ export function useCatalog() {
     return created
   }, [])
 
+  const updateItem = useCallback(async (id: string, request: CreateItemRequest) => {
+    const updated = await api.updateItem(id, request)
+    setItems((prev) => prev.map((item) => (item.id === id ? updated : item)))
+    return updated
+  }, [])
+
   const deleteItem = useCallback(async (id: string) => {
     await api.deleteItem(id)
     setItems((prev) => prev.filter((item) => item.id !== id))
@@ -40,5 +46,5 @@ export function useCatalog() {
     return updated
   }, [])
 
-  return { items, loading, error, refresh, createItem, deleteItem, uploadImage }
+  return { items, loading, error, refresh, createItem, updateItem, deleteItem, uploadImage }
 }

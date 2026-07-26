@@ -9,3 +9,5 @@ spring:
 
 fitlab:
   upload-dir: ${java.io.tmpdir}/fitlab-uploads-test
+  admin:
+    token: test-admin-token

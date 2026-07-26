@@ -50,3 +50,13 @@ export type Slots = {
   BOTTOM: ItemDto | null
   SHOES: ItemDto | null
 }
+
+export interface ScoringConfigDto {
+  colorWeight: number
+  vibeWeight: number
+  neutralColorThreshold: number
+  neutralColors: string[]
+  sharedVibeReasonEnabled: boolean
+  sharedColorReasonEnabled: boolean
+  neutralCounterbalanceReasonEnabled: boolean
+}

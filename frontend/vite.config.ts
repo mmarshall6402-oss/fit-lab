@@ -13,6 +13,7 @@ export default defineConfig({
       '/outfit': backend,
       '/uploads': backend,
       '/seed-images': backend,
+      '/admin': backend,
     },
   },
 })

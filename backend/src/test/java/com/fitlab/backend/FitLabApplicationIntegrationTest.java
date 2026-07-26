@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
@@ -49,6 +51,23 @@ class FitLabApplicationIntegrationTest {
 
         ResponseEntity<ItemDto[]> afterDelete = restTemplate.getForEntity(url("/items?category=SHIRT"), ItemDto[].class);
         assertThat(List.of(afterDelete.getBody())).extracting(ItemDto::id).doesNotContain(created.getBody().id());
+    }
+
+    @Test
+    void updateItemEditsNameAndTags() {
+        CreateItemRequest request = new CreateItemRequest("Draft Jacket", Category.SHIRT, null, Set.of("black"), Set.of("street"));
+        ItemDto created = restTemplate.postForEntity(url("/items"), request, ItemDto.class).getBody();
+
+        CreateItemRequest edit = new CreateItemRequest("Final Jacket", Category.SHIRT, null, Set.of("red", "black"), Set.of("loud"));
+        ResponseEntity<ItemDto> response = restTemplate.exchange(
+                url("/items/" + created.id()), HttpMethod.PUT, new HttpEntity<>(edit), ItemDto.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody().name()).isEqualTo("Final Jacket");
+        assertThat(response.getBody().colors()).containsExactlyInAnyOrder("red", "black");
+        assertThat(response.getBody().vibes()).containsExactly("loud");
+
+        restTemplate.delete(url("/items/" + created.id()));
     }
 
     @Test

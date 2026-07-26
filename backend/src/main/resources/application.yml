@@ -21,3 +21,6 @@ server:
 fitlab:
   # External, outside the project tree by default. Override for prod deploys.
   upload-dir: ${FITLAB_UPLOAD_DIR:${user.home}/fitlab-uploads}
+  admin:
+    # Shared secret gating /admin/**. Always override this in production.
+    token: ${ADMIN_TOKEN:changeme-admin-token}

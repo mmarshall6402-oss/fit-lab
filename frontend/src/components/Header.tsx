@@ -5,9 +5,17 @@ export function Header() {
         <h1 className="font-mono text-xl font-bold tracking-tight">
           FIT<span className="text-accent">//</span>LAB
         </h1>
-        <p className="hidden font-mono text-xs uppercase tracking-widest text-neutral-500 sm:block">
-          mix. match. cop the fit.
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="hidden font-mono text-xs uppercase tracking-widest text-neutral-500 sm:block">
+            mix. match. cop the fit.
+          </p>
+          <a
+            href="#admin"
+            className="font-mono text-xs uppercase tracking-widest text-neutral-600 hover:text-accent"
+          >
+            Admin
+          </a>
+        </div>
       </div>
     </header>
   )
