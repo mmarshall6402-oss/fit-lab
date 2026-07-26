@@ -11,6 +11,13 @@ export interface ItemDto {
   vibes: string[]
 }
 
+export interface AttachmentDto {
+  id: string
+  url: string
+  filename: string
+  contentType: string
+}
+
 export interface CreateItemRequest {
   name: string
   category: Category

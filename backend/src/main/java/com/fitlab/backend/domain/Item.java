@@ -1,5 +1,6 @@
 package com.fitlab.backend.domain;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -9,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -52,4 +54,8 @@ public class Item {
     @CollectionTable(name = "item_vibes", joinColumns = @JoinColumn(name = "item_id"))
     @Column(name = "vibe")
     private Set<String> vibes = new HashSet<>();
+
+    @Builder.Default
+    @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Set<Attachment> attachments = new HashSet<>();
 }

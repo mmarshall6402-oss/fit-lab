@@ -1,4 +1,5 @@
 import type {
+  AttachmentDto,
   Category,
   CreateItemRequest,
   FullRecommendationDto,
@@ -47,6 +48,17 @@ export const api = {
     form.append('file', file)
     return request<ItemDto>(`/items/${id}/image`, { method: 'POST', body: form })
   },
+
+  listAttachments: (itemId: string) => request<AttachmentDto[]>(`/items/${itemId}/attachments`),
+
+  uploadAttachment: (itemId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<AttachmentDto>(`/items/${itemId}/attachments`, { method: 'POST', body: form })
+  },
+
+  deleteAttachment: (itemId: string, attachmentId: string) =>
+    request<void>(`/items/${itemId}/attachments/${attachmentId}`, { method: 'DELETE' }),
 
   recommend: (anchorId: string, category: Category) =>
     request<RecommendationDto[]>(`/recommend?anchorId=${anchorId}&category=${category}`),
