@@ -31,10 +31,17 @@ public class ImageStorageService {
         }
     }
 
-    /** Stores the file under a fresh UUID name and returns the public-facing URL path. */
+    /** Stores the file under the item's id (one photo per item, overwriting any previous one) and returns the public-facing URL path. */
     public String store(UUID itemId, MultipartFile file) {
-        String extension = extensionOf(file.getOriginalFilename());
-        String filename = itemId + extension;
+        return storeAs(itemId.toString() + extensionOf(file.getOriginalFilename()), file);
+    }
+
+    /** Stores the file under a fresh random name (many per item allowed) and returns the public-facing URL path. */
+    public String storeAttachment(MultipartFile file) {
+        return storeAs(UUID.randomUUID() + extensionOf(file.getOriginalFilename()), file);
+    }
+
+    private String storeAs(String filename, MultipartFile file) {
         Path target = uploadDir.resolve(filename).normalize();
         if (!target.getParent().equals(uploadDir)) {
             throw new IllegalArgumentException("Invalid file name");
@@ -42,7 +49,7 @@ public class ImageStorageService {
         try {
             file.transferTo(target);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to store image for item " + itemId, e);
+            throw new UncheckedIOException("Failed to store file " + filename, e);
         }
         return "/uploads/" + filename;
     }

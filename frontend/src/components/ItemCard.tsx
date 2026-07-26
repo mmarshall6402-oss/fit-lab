@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import type { ItemDto } from '../types'
 import { ColorTag, VibeTag } from './Tag'
 import { CategoryIcon } from './CategoryIcon'
@@ -9,9 +10,13 @@ interface Props {
   score?: number
   onSelect: () => void
   onDelete: () => void
+  onUploadImage: (file: File) => void
+  onOpenAttachments: () => void
 }
 
-export function ItemCard({ item, selected, score, onSelect, onDelete }: Props) {
+export function ItemCard({ item, selected, score, onSelect, onDelete, onUploadImage, onOpenAttachments }: Props) {
+  const photoInput = useRef<HTMLInputElement>(null)
+
   return (
     <div
       className={`group relative flex flex-col overflow-hidden rounded-lg border transition-colors ${
@@ -55,19 +60,68 @@ export function ItemCard({ item, selected, score, onSelect, onDelete }: Props) {
         </div>
       )}
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete()
+      <input
+        ref={photoInput}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onUploadImage(file)
+          e.target.value = ''
         }}
-        className="absolute bottom-2 right-2 hidden h-7 w-7 items-center justify-center rounded-full bg-black/70 text-neutral-400 hover:text-red-400 group-hover:flex cursor-pointer"
-        title="Delete item"
-        aria-label={`Delete ${item.name}`}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
-          <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 13h8l1-13" strokeLinecap="round" />
-        </svg>
-      </button>
+      />
+
+      <div className="absolute bottom-2 right-2 hidden gap-1.5 group-hover:flex">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            photoInput.current?.click()
+          }}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-neutral-400 hover:text-accent cursor-pointer"
+          title="Upload photo"
+          aria-label={`Upload photo for ${item.name}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
+            <path
+              d="M4 8h3l1.5-2h7L17 8h3v11H4V8Z"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            <circle cx="12" cy="13.5" r="3" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenAttachments()
+          }}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-neutral-400 hover:text-accent cursor-pointer"
+          title="Files"
+          aria-label={`Files for ${item.name}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
+            <path
+              d="M8 7V5.5a2.5 2.5 0 0 1 5 0V15a3.5 3.5 0 0 1-7 0V7a1 1 0 0 1 2 0v8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-neutral-400 hover:text-red-400 cursor-pointer"
+          title="Delete item"
+          aria-label={`Delete ${item.name}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
+            <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 13h8l1-13" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }
