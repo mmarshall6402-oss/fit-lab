@@ -41,11 +41,20 @@ jobs:
       # config.js is intentionally excluded: it's runtime config meant to be
       # edited in place in the S3 console (see the comment in the file
       # itself), not overwritten by the repo's dev-default on every deploy.
+      #
+      # Two passes so index.html always revalidates while hashed assets cache
+      # forever: without this, a browser holding a cached index.html from a
+      # previous build keeps requesting asset filenames that --delete has
+      # since removed from the bucket, and gets 404s until it hard-refreshes.
       - name: Sync to S3
         run: |
           aws s3 sync frontend/dist s3://fitlab-frontend-mark-058914805301-us-east-1-an \
             --delete \
-            --exclude "config.js"
+            --exclude "config.js" \
+            --exclude "index.html" \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 cp frontend/dist/index.html s3://fitlab-frontend-mark-058914805301-us-east-1-an/index.html \
+            --cache-control "no-cache"
 
       # Trims the secret defensively: a stray trailing newline from how it was
       # pasted into GitHub silently breaks the `\` line continuation below and
