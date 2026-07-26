@@ -47,8 +47,14 @@ jobs:
             --delete \
             --exclude "config.js"
 
+      # Trims the secret defensively: a stray trailing newline from how it was
+      # pasted into GitHub silently breaks the `\` line continuation below and
+      # drops --paths from the command entirely.
       - name: Invalidate CloudFront cache
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
+          DISTRIBUTION_ID=$(printf '%s' "$CLOUDFRONT_DISTRIBUTION_ID" | tr -d '[:space:]')
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id "$DISTRIBUTION_ID" \
             --paths "/*"
