@@ -7,9 +7,12 @@ import com.fitlab.backend.dto.OutfitDto;
 import com.fitlab.backend.exception.InsufficientCatalogException;
 import com.fitlab.backend.exception.ItemNotFoundException;
 import com.fitlab.backend.repository.ItemRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 
 /**
@@ -22,10 +25,18 @@ public class OutfitService {
 
     private final ItemRepository itemRepository;
     private final OutfitScoringService scoringService;
+    private final Random random;
 
+    @Autowired
     public OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService) {
+        this(itemRepository, scoringService, new Random());
+    }
+
+    /** Package-private: lets tests inject a Random with a fixed nextInt() to make tie-breaking deterministic. */
+    OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService, Random random) {
         this.itemRepository = itemRepository;
         this.scoringService = scoringService;
+        this.random = random;
     }
 
     public OutfitDto buildBest(UUID anchorId) {
@@ -35,9 +46,13 @@ public class OutfitService {
         List<Item> bottoms = candidatesFor(Category.BOTTOM, anchor);
         List<Item> shoes = candidatesFor(Category.SHOES, anchor);
 
-        Item bestShirt = null;
-        Item bestBottom = null;
-        Item bestShoes = null;
+        // Collect every combo tied for the best score instead of keeping only the
+        // first one hit in catalog order - a strict ">" comparison here always
+        // favored whichever item came first in findByCategory()'s result order,
+        // so ties (common when tags are sparse) silently always resolved the same
+        // way regardless of which shirt/bottom was picked. Breaking ties randomly
+        // fixes that without changing what counts as "best".
+        List<Item[]> bestCombos = new ArrayList<>();
         double bestScore = -1;
 
         for (Item shirt : shirts) {
@@ -46,13 +61,19 @@ public class OutfitService {
                     double score = scoringService.holisticScore(shirt, bottom, shoe);
                     if (score > bestScore) {
                         bestScore = score;
-                        bestShirt = shirt;
-                        bestBottom = bottom;
-                        bestShoes = shoe;
+                        bestCombos.clear();
+                        bestCombos.add(new Item[] { shirt, bottom, shoe });
+                    } else if (score == bestScore) {
+                        bestCombos.add(new Item[] { shirt, bottom, shoe });
                     }
                 }
             }
         }
+
+        Item[] chosen = bestCombos.get(random.nextInt(bestCombos.size()));
+        Item bestShirt = chosen[0];
+        Item bestBottom = chosen[1];
+        Item bestShoes = chosen[2];
 
         return new OutfitDto(
                 ItemDto.from(bestShirt),

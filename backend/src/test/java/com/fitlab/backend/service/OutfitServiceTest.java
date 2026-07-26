@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
@@ -53,6 +54,33 @@ class OutfitServiceTest {
         assertThat(outfit.shoes().id()).isEqualTo(strongShoes.getId());
         assertThat(outfit.score()).isEqualTo(100.0);
         assertThat(outfit.reasons()).isNotEmpty();
+    }
+
+    @Test
+    void breaksTiesAcrossAllTiedCombinationsInsteadOfAlwaysTheFirstInCatalogOrder() {
+        Item anchorShirt = item("anchor shirt", Category.SHIRT, Set.of("black"), Set.of());
+        Item bottom = item("bottom", Category.BOTTOM, Set.of(), Set.of());
+        Item firstShoe = item("first shoe", Category.SHOES, Set.of(), Set.of());
+        Item secondShoe = item("second shoe", Category.SHOES, Set.of(), Set.of());
+        // Neither shoe shares a tag with anything, so both combos genuinely tie at score 0.
+        when(itemRepository.findById(anchorShirt.getId())).thenReturn(Optional.of(anchorShirt));
+        when(itemRepository.findByCategory(Category.BOTTOM)).thenReturn(List.of(bottom));
+        when(itemRepository.findByCategory(Category.SHOES)).thenReturn(List.of(firstShoe, secondShoe));
+
+        OutfitService pickFirst = new OutfitService(itemRepository, scoringService, fixedRandom(0));
+        OutfitService pickSecond = new OutfitService(itemRepository, scoringService, fixedRandom(1));
+
+        assertThat(pickFirst.buildBest(anchorShirt.getId()).shoes().id()).isEqualTo(firstShoe.getId());
+        assertThat(pickSecond.buildBest(anchorShirt.getId()).shoes().id()).isEqualTo(secondShoe.getId());
+    }
+
+    private Random fixedRandom(int index) {
+        return new Random() {
+            @Override
+            public int nextInt(int bound) {
+                return index;
+            }
+        };
     }
 
     @Test
