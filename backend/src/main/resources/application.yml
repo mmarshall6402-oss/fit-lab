@@ -24,3 +24,7 @@ fitlab:
   admin:
     # Shared secret gating /admin/**. Always override this in production.
     token: ${ADMIN_TOKEN:changeme-admin-token}
+  ai:
+    # Model used to auto-tag uploaded photos with colors/vibes. Only runs when
+    # ANTHROPIC_API_KEY is set - otherwise auto-tagging is silently skipped.
+    tagging-model: ${FITLAB_TAGGING_MODEL:claude-opus-5}

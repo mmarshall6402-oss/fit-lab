@@ -9,6 +9,7 @@ import com.fitlab.backend.repository.ItemRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -18,9 +19,11 @@ import java.util.stream.Collectors;
 public class ItemService {
 
     private final ItemRepository itemRepository;
+    private final ImageTaggingService imageTaggingService;
 
-    public ItemService(ItemRepository itemRepository) {
+    public ItemService(ItemRepository itemRepository, ImageTaggingService imageTaggingService) {
         this.itemRepository = itemRepository;
+        this.imageTaggingService = imageTaggingService;
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +68,26 @@ public class ItemService {
         return ItemDto.from(itemRepository.save(item));
     }
 
+    /**
+     * Fills colors/vibes from the photo when (and only when) the item currently has
+     * neither - never overwrites tags the user already entered. Untagged items can't
+     * share a color/vibe with anything, so they always score 0 in outfit matching;
+     * this is what makes bulk-uploaded photos matchable without manual tagging.
+     */
+    @Transactional
+    public ItemDto autoTagIfUntagged(UUID id, byte[] imageBytes, String contentType) {
+        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+        if (!item.getColors().isEmpty() || !item.getVibes().isEmpty()) {
+            return ItemDto.from(item);
+        }
+        imageTaggingService.suggestTags(imageBytes, contentType, item.getName(), item.getCategory())
+                .ifPresent(suggestion -> {
+                    item.setColors(normalize(toSet(suggestion.colors())));
+                    item.setVibes(normalize(toSet(suggestion.vibes())));
+                });
+        return ItemDto.from(itemRepository.save(item));
+    }
+
     /** Ids are always generated server-side; any id in the request is discarded. Tags are normalized to lowercase. */
     private Item toEntity(CreateItemRequest request) {
         return Item.builder()
@@ -75,6 +98,10 @@ public class ItemService {
                 .colors(normalize(request.colors()))
                 .vibes(normalize(request.vibes()))
                 .build();
+    }
+
+    private Set<String> toSet(List<String> values) {
+        return values == null ? Set.of() : new HashSet<>(values);
     }
 
     private Set<String> normalize(Set<String> tags) {
