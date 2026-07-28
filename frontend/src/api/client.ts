@@ -7,6 +7,10 @@ import type {
   OutfitDto,
   RecommendationDto,
   ScoringConfigDto,
+  StyleFeedbackDto,
+  StyleProfileDto,
+  SubmitItemFeedbackRequest,
+  SubmitOutfitFeedbackRequest,
 } from '../types'
 
 export class ApiError extends Error {
@@ -99,4 +103,14 @@ export const api = {
 
   adminResetScoringConfig: (token: string) =>
     request<ScoringConfigDto>('/admin/scoring-config/reset', { method: 'POST', headers: adminHeaders(token) }),
+
+  submitItemFeedback: (itemId: string, feedbackRequest: SubmitItemFeedbackRequest) =>
+    request<StyleFeedbackDto>(`/items/${itemId}/feedback`, { method: 'POST', body: JSON.stringify(feedbackRequest) }),
+
+  submitOutfitFeedback: (feedbackRequest: SubmitOutfitFeedbackRequest) =>
+    request<StyleFeedbackDto>('/outfit/feedback', { method: 'POST', body: JSON.stringify(feedbackRequest) }),
+
+  getStyleProfile: () => request<StyleProfileDto>('/style-profile'),
+
+  getStyleFeedbackHistory: () => request<StyleFeedbackDto[]>('/style-profile/history'),
 }

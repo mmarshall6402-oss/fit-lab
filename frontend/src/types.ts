@@ -60,3 +60,43 @@ export interface ScoringConfigDto {
   sharedColorReasonEnabled: boolean
   neutralCounterbalanceReasonEnabled: boolean
 }
+
+export type FeedbackTarget = 'ITEM' | 'OUTFIT'
+export type InputMethod = 'TEXT' | 'VOICE'
+
+export interface StyleFeedbackDto {
+  id: string
+  target: FeedbackTarget
+  itemId: string | null
+  shirtId: string | null
+  bottomId: string | null
+  shoesId: string | null
+  inputMethod: InputMethod
+  rawText: string
+  extractionSucceeded: boolean
+  extractedLikes: string[]
+  extractedStyleTags: string[]
+  extractedReasoning: string | null
+  createdAt: string
+}
+
+export interface StyleProfileDto {
+  likes: string[]
+  styleTags: string[]
+  reasoningSummary: string
+  feedbackCount: number
+  updatedAt: string
+}
+
+export interface SubmitItemFeedbackRequest {
+  rawText: string
+  inputMethod: InputMethod
+}
+
+export interface SubmitOutfitFeedbackRequest {
+  shirtId: string
+  bottomId: string
+  shoesId: string
+  rawText: string
+  inputMethod: InputMethod
+}

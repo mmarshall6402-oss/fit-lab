@@ -14,6 +14,7 @@ export default defineConfig({
       '/uploads': backend,
       '/seed-images': backend,
       '/admin': backend,
+      '/style-profile': backend,
     },
   },
 })

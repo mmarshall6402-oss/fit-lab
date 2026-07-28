@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCatalog } from './hooks/useCatalog'
+import { useStyleProfile } from './hooks/useStyleProfile'
 import { api } from './api/client'
-import { CATEGORIES, type Category, type ItemDto, type OutfitDto, type Slots } from './types'
+import { CATEGORIES, type Category, type InputMethod, type ItemDto, type OutfitDto, type Slots } from './types'
 import { Header } from './components/Header'
 import { CatalogPanel } from './components/CatalogPanel'
 import { OutfitBuilder } from './components/OutfitBuilder'
@@ -14,6 +15,7 @@ function pickDefaultAnchor(slots: Slots): Category | null {
 
 export default function App() {
   const { items, loading, error, createItem, deleteItem, uploadImage } = useCatalog()
+  const { submitItemFeedback, submitOutfitFeedback } = useStyleProfile()
 
   const [activeCategory, setActiveCategory] = useState<Category>('SHIRT')
   const [slots, setSlots] = useState<Slots>(EMPTY_SLOTS)
@@ -81,6 +83,17 @@ export default function App() {
     if (slots[category]) setPinnedAnchor(category)
   }
 
+  function handleSubmitOutfitFeedback(rawText: string, inputMethod: InputMethod) {
+    if (!outfit) return Promise.reject(new Error('No scored outfit to give feedback on.'))
+    return submitOutfitFeedback({
+      shirtId: outfit.shirt.id,
+      bottomId: outfit.bottom.id,
+      shoesId: outfit.shoes.id,
+      rawText,
+      inputMethod,
+    })
+  }
+
   async function handleGenerate() {
     if (!anchorCategory) return
     const anchor = slots[anchorCategory]
@@ -114,6 +127,7 @@ export default function App() {
           onDelete={deleteItem}
           onCreate={createItem}
           onUploadImage={uploadImage}
+          onSubmitItemFeedback={submitItemFeedback}
         />
         <OutfitBuilder
           slots={slots}
@@ -126,6 +140,7 @@ export default function App() {
           onSetAnchor={handleSetAnchor}
           onPick={handlePick}
           onGenerate={handleGenerate}
+          onSubmitOutfitFeedback={handleSubmitOutfitFeedback}
         />
       </main>
     </div>

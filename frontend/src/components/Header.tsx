@@ -10,6 +10,12 @@ export function Header() {
             mix. match. cop the fit.
           </p>
           <a
+            href="#style-profile"
+            className="font-mono text-xs uppercase tracking-widest text-neutral-600 hover:text-accent"
+          >
+            Style Profile
+          </a>
+          <a
             href="#admin"
             className="font-mono text-xs uppercase tracking-widest text-neutral-600 hover:text-accent"
           >

@@ -1,4 +1,4 @@
-import type { Category, ItemDto, OutfitDto, Slots } from '../types'
+import type { Category, InputMethod, ItemDto, OutfitDto, Slots, StyleFeedbackDto } from '../types'
 import { CATEGORIES } from '../types'
 import { OutfitSlot } from './OutfitSlot'
 import { ScorePanel } from './ScorePanel'
@@ -15,6 +15,7 @@ interface Props {
   onSetAnchor: (category: Category) => void
   onPick: (item: ItemDto) => void
   onGenerate: () => void
+  onSubmitOutfitFeedback: (rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
 }
 
 export function OutfitBuilder({
@@ -28,6 +29,7 @@ export function OutfitBuilder({
   onSetAnchor,
   onPick,
   onGenerate,
+  onSubmitOutfitFeedback,
 }: Props) {
   const filledCount = CATEGORIES.filter((c) => slots[c]).length
   const anchorItem = anchorCategory ? slots[anchorCategory] : null
@@ -64,7 +66,7 @@ export function OutfitBuilder({
         </p>
       )}
 
-      <ScorePanel outfit={outfit} loading={scoring} />
+      <ScorePanel outfit={outfit} loading={scoring} onSubmitFeedback={onSubmitOutfitFeedback} />
 
       {anchorItem &&
         emptyCategories.map((category) => (

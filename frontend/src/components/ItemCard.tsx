@@ -12,9 +12,19 @@ interface Props {
   onDelete: () => void
   onUploadImage: (file: File) => void
   onOpenAttachments: () => void
+  onOpenFeedback: () => void
 }
 
-export function ItemCard({ item, selected, score, onSelect, onDelete, onUploadImage, onOpenAttachments }: Props) {
+export function ItemCard({
+  item,
+  selected,
+  score,
+  onSelect,
+  onDelete,
+  onUploadImage,
+  onOpenAttachments,
+  onOpenFeedback,
+}: Props) {
   const photoInput = useRef<HTMLInputElement>(null)
 
   return (
@@ -105,6 +115,23 @@ export function ItemCard({ item, selected, score, onSelect, onDelete, onUploadIm
               d="M8 7V5.5a2.5 2.5 0 0 1 5 0V15a3.5 3.5 0 0 1-7 0V7a1 1 0 0 1 2 0v8"
               strokeLinecap="round"
               strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenFeedback()
+          }}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-neutral-400 hover:text-accent cursor-pointer"
+          title="Why do you like this?"
+          aria-label={`Add style feedback for ${item.name}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
+            <path
+              d="M4 5h16v11H8l-4 4V5Z"
+              strokeLinejoin="round"
+              strokeLinecap="round"
             />
           </svg>
         </button>

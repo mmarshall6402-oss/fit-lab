@@ -1,4 +1,5 @@
-import type { OutfitDto } from '../types'
+import type { InputMethod, OutfitDto, StyleFeedbackDto } from '../types'
+import { StyleFeedbackForm } from './StyleFeedbackForm'
 
 function tier(score: number): { label: string; color: string } {
   if (score >= 70) return { label: 'FIRE', color: 'text-accent' }
@@ -6,7 +7,13 @@ function tier(score: number): { label: string; color: string } {
   return { label: 'MISMATCHED', color: 'text-neutral-400' }
 }
 
-export function ScorePanel({ outfit, loading }: { outfit: OutfitDto | null; loading: boolean }) {
+interface Props {
+  outfit: OutfitDto | null
+  loading: boolean
+  onSubmitFeedback: (rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
+}
+
+export function ScorePanel({ outfit, loading, onSubmitFeedback }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-white/10 bg-black/30 p-6">
@@ -43,6 +50,8 @@ export function ScorePanel({ outfit, loading }: { outfit: OutfitDto | null; load
           </li>
         ))}
       </ul>
+
+      <StyleFeedbackForm onSubmit={onSubmitFeedback} label="Why does this fit work?" />
     </div>
   )
 }

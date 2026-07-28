@@ -3,8 +3,12 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { AdminPage } from './components/AdminPage.tsx'
+import { StyleProfilePage } from './components/StyleProfilePage.tsx'
 
-/** Hash-based routing (no server-side rewrite needed on static S3 hosting): #admin opens the admin dashboard. */
+/**
+ * Hash-based routing (no server-side rewrite needed on static S3 hosting):
+ * #admin opens the admin dashboard, #style-profile opens the style profile.
+ */
 function Root() {
   const [hash, setHash] = useState(window.location.hash)
 
@@ -14,7 +18,9 @@ function Root() {
     return () => window.removeEventListener('hashchange', handler)
   }, [])
 
-  return hash.startsWith('#admin') ? <AdminPage /> : <App />
+  if (hash.startsWith('#admin')) return <AdminPage />
+  if (hash.startsWith('#style-profile')) return <StyleProfilePage />
+  return <App />
 }
 
 createRoot(document.getElementById('root')!).render(

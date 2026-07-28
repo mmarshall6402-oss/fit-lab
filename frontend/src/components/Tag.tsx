@@ -26,3 +26,12 @@ export function VibeTag({ vibe }: { vibe: string }) {
     </span>
   )
 }
+
+/** Neutral chip for freeform style-profile data (likes/style tags) that isn't a literal color or vibe. */
+export function PlainTag({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-neutral-300">
+      {label}
+    </span>
+  )
+}

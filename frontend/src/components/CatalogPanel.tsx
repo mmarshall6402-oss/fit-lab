@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import type { Category, CreateItemRequest, ItemDto, Slots } from '../types'
+import type { Category, CreateItemRequest, InputMethod, ItemDto, Slots, StyleFeedbackDto } from '../types'
 import { CATEGORIES } from '../types'
 import { ItemCard } from './ItemCard'
 import { CategoryIcon } from './CategoryIcon'
 import { AddItemModal } from './AddItemModal'
 import { ItemAttachmentsModal } from './ItemAttachmentsModal'
+import { ItemFeedbackModal } from './ItemFeedbackModal'
 
 interface Props {
   items: ItemDto[]
@@ -17,6 +18,7 @@ interface Props {
   onDelete: (id: string) => void
   onCreate: (request: CreateItemRequest) => Promise<ItemDto>
   onUploadImage: (id: string, file: File) => Promise<ItemDto>
+  onSubmitItemFeedback: (itemId: string, rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
 }
 
 /** Strips the extension and swaps separators for spaces, e.g. "aj1-fragment.png" -> "aj1 fragment". */
@@ -35,9 +37,11 @@ export function CatalogPanel({
   onDelete,
   onCreate,
   onUploadImage,
+  onSubmitItemFeedback,
 }: Props) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [attachmentsItem, setAttachmentsItem] = useState<ItemDto | null>(null)
+  const [feedbackItem, setFeedbackItem] = useState<ItemDto | null>(null)
   const [bulkUploading, setBulkUploading] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
   const bulkInput = useRef<HTMLInputElement>(null)
@@ -155,6 +159,7 @@ export function CatalogPanel({
                 onUploadImage(item.id, file)
               }}
               onOpenAttachments={() => setAttachmentsItem(item)}
+              onOpenFeedback={() => setFeedbackItem(item)}
             />
           ))}
         </div>
@@ -170,6 +175,14 @@ export function CatalogPanel({
       )}
 
       {attachmentsItem && <ItemAttachmentsModal item={attachmentsItem} onClose={() => setAttachmentsItem(null)} />}
+
+      {feedbackItem && (
+        <ItemFeedbackModal
+          item={feedbackItem}
+          onSubmit={(rawText, inputMethod) => onSubmitItemFeedback(feedbackItem.id, rawText, inputMethod)}
+          onClose={() => setFeedbackItem(null)}
+        />
+      )}
     </section>
   )
 }
