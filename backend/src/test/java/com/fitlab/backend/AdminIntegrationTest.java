@@ -90,6 +90,22 @@ class AdminIntegrationTest {
         restTemplate.exchange(url("/admin/scoring-config/reset"), HttpMethod.POST, withToken(null, ADMIN_TOKEN), ScoringConfigDto.class);
     }
 
+    @Test
+    void wipeItemsRequiresTokenAndClearsTheCatalog() {
+        createItem("Wipe Test Shirt", Category.SHIRT, Set.of("black"), Set.of());
+
+        ResponseEntity<String> noToken = restTemplate.exchange(
+                url("/admin/items"), HttpMethod.DELETE, withToken(null, null), String.class);
+        assertThat(noToken.getStatusCode().value()).isEqualTo(401);
+
+        ResponseEntity<Void> wiped = restTemplate.exchange(
+                url("/admin/items"), HttpMethod.DELETE, withToken(null, ADMIN_TOKEN), Void.class);
+        assertThat(wiped.getStatusCode().value()).isEqualTo(204);
+
+        ResponseEntity<ItemDto[]> remaining = restTemplate.getForEntity(url("/items"), ItemDto[].class);
+        assertThat(remaining.getBody()).isEmpty();
+    }
+
     private ItemDto createItem(String name, Category category, Set<String> colors, Set<String> vibes) {
         CreateItemRequest request = new CreateItemRequest(name, category, null, colors, vibes);
         return restTemplate.postForEntity(url("/items"), request, ItemDto.class).getBody();

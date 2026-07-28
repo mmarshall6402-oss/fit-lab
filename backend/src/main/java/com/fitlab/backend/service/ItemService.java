@@ -61,6 +61,12 @@ public class ItemService {
         itemRepository.deleteById(id);
     }
 
+    /** Wipes every item in the catalog. Admin-only - see AdminController. */
+    @Transactional
+    public void deleteAll() {
+        itemRepository.deleteAll();
+    }
+
     @Transactional
     public ItemDto setImageUrl(UUID id, String imageUrl) {
         Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
