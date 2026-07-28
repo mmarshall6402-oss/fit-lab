@@ -32,14 +32,6 @@ class FitLabApplicationIntegrationTest {
     }
 
     @Test
-    void catalogIsSeededOnStartup() {
-        ResponseEntity<ItemDto[]> response = restTemplate.getForEntity(url("/items"), ItemDto[].class);
-
-        assertThat(response.getBody()).isNotEmpty();
-        assertThat(response.getBody()).extracting(ItemDto::category).contains(Category.SHIRT, Category.BOTTOM, Category.SHOES);
-    }
-
-    @Test
     void createAndDeleteItemRoundTrips() {
         CreateItemRequest request = new CreateItemRequest("Test Jacket", Category.SHIRT, null, Set.of("black"), Set.of("street"));
 
@@ -71,9 +63,10 @@ class FitLabApplicationIntegrationTest {
     }
 
     @Test
-    void buildsBestOutfitFromSeededCatalog() {
-        ItemDto[] shirts = restTemplate.getForEntity(url("/items?category=SHIRT"), ItemDto[].class).getBody();
-        ItemDto anchor = shirts[0];
+    void buildsBestOutfitFromCatalog() {
+        ItemDto anchor = createItem("Test Shirt", Category.SHIRT, Set.of("black"), Set.of("street"));
+        createItem("Test Bottom", Category.BOTTOM, Set.of("black"), Set.of("street"));
+        createItem("Test Shoes", Category.SHOES, Set.of("black"), Set.of("street"));
 
         ResponseEntity<OutfitDto> response = restTemplate.getForEntity(url("/outfit/build?anchorId=" + anchor.id()), OutfitDto.class);
 
@@ -82,5 +75,10 @@ class FitLabApplicationIntegrationTest {
         assertThat(outfit.shirt().id()).isEqualTo(anchor.id());
         assertThat(outfit.score()).isBetween(0.0, 100.0);
         assertThat(outfit.reasons()).isNotEmpty();
+    }
+
+    private ItemDto createItem(String name, Category category, Set<String> colors, Set<String> vibes) {
+        CreateItemRequest request = new CreateItemRequest(name, category, null, colors, vibes);
+        return restTemplate.postForEntity(url("/items"), request, ItemDto.class).getBody();
     }
 }

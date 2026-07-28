@@ -8,8 +8,8 @@ Spring Boot REST backend for FIT//LAB, the streetwear fit-builder app.
 mvn spring-boot:run
 ```
 
-Serves on `http://localhost:8080`. On first boot, if the catalog is empty it seeds
-from `src/main/resources/seed/starter-catalog.json`.
+Serves on `http://localhost:8080`. The catalog starts empty; add items via
+`POST /items` or bulk-import via `POST /items/import`.
 
 ## Config (env vars)
 
@@ -43,4 +43,4 @@ from `src/main/resources/seed/starter-catalog.json`.
 ## Tests
 
 `mvn test` covers `TagMatcher`, `MatchService`, `OutfitScoringService`, `OutfitService`,
-and a full-stack integration test (seeding, CRUD, outfit build) against an in-memory H2 DB.
+and a full-stack integration test (CRUD, outfit build) against an in-memory H2 DB.

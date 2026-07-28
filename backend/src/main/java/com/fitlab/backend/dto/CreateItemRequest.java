@@ -8,9 +8,9 @@ import jakarta.validation.constraints.NotNull;
 import java.util.Set;
 
 /**
- * Inbound item payload. Any "id" field present in the JSON (e.g. from the seed
- * catalog or a copy-pasted export) is intentionally ignored - ids are always
- * generated server-side.
+ * Inbound item payload. Any "id" field present in the JSON (e.g. from a
+ * copy-pasted export) is intentionally ignored - ids are always generated
+ * server-side.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CreateItemRequest(
