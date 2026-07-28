@@ -170,6 +170,17 @@ export function AdminPage() {
                   className="rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-accent"
                 />
               </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Profile weight</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={config.profileWeight}
+                  onChange={(e) => setConfig({ ...config, profileWeight: Number(e.target.value) })}
+                  className="rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-accent"
+                />
+              </label>
               <label className="col-span-2 flex flex-col gap-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
                   Neutral-counterbalance threshold (min colors on the loud piece)

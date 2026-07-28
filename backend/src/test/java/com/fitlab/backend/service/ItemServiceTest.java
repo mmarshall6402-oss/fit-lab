@@ -3,6 +3,7 @@ package com.fitlab.backend.service;
 import com.fitlab.backend.domain.Category;
 import com.fitlab.backend.domain.Item;
 import com.fitlab.backend.dto.ItemDto;
+import com.fitlab.backend.repository.ItemProfileAffinityRepository;
 import com.fitlab.backend.repository.ItemRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,8 +30,11 @@ class ItemServiceTest {
     @Mock
     private ImageTaggingService imageTaggingService;
 
+    @Mock
+    private ItemProfileAffinityRepository affinityRepository;
+
     private ItemService itemService() {
-        return new ItemService(itemRepository, imageTaggingService);
+        return new ItemService(itemRepository, imageTaggingService, affinityRepository);
     }
 
     private Item item(Set<String> colors, Set<String> vibes) {

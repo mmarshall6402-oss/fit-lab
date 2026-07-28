@@ -2,6 +2,7 @@ package com.fitlab.backend.dto;
 
 import com.fitlab.backend.domain.FeedbackTarget;
 import com.fitlab.backend.domain.InputMethod;
+import com.fitlab.backend.domain.Sentiment;
 import com.fitlab.backend.domain.StyleFeedback;
 
 import java.time.Instant;
@@ -16,9 +17,11 @@ public record StyleFeedbackDto(
         UUID bottomId,
         UUID shoesId,
         InputMethod inputMethod,
+        Sentiment sentiment,
         String rawText,
         boolean extractionSucceeded,
         List<String> extractedLikes,
+        List<String> extractedDislikes,
         List<String> extractedStyleTags,
         String extractedReasoning,
         Instant createdAt
@@ -32,9 +35,11 @@ public record StyleFeedbackDto(
                 entity.getBottomId(),
                 entity.getShoesId(),
                 entity.getInputMethod(),
+                entity.getSentiment(),
                 entity.getRawText(),
                 entity.isExtractionSucceeded(),
                 List.copyOf(entity.getExtractedLikes()),
+                List.copyOf(entity.getExtractedDislikes()),
                 List.copyOf(entity.getExtractedStyleTags()),
                 entity.getExtractedReasoning(),
                 entity.getCreatedAt()

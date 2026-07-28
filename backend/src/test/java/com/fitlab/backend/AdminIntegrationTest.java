@@ -69,7 +69,7 @@ class AdminIntegrationTest {
         UpdateScoringConfigRequest request = new UpdateScoringConfigRequest(
                 3.0, 2.0, 3,
                 Set.of("black", "white", "grey", "gray", "beige", "tan", "navy", "cream", "khaki"),
-                true, true, true);
+                true, true, true, 2.0);
         ResponseEntity<ScoringConfigDto> updateResponse = restTemplate.exchange(
                 url("/admin/scoring-config"), HttpMethod.PUT, withToken(request, ADMIN_TOKEN), ScoringConfigDto.class);
         assertThat(updateResponse.getStatusCode().is2xxSuccessful()).isTrue();
@@ -78,7 +78,7 @@ class AdminIntegrationTest {
         UpdateScoringConfigRequest zeroedColor = new UpdateScoringConfigRequest(
                 0.0, 2.0, 3,
                 Set.of("black", "white", "grey", "gray", "beige", "tan", "navy", "cream", "khaki"),
-                true, true, true);
+                true, true, true, 2.0);
         restTemplate.exchange(url("/admin/scoring-config"), HttpMethod.PUT, withToken(zeroedColor, ADMIN_TOKEN), ScoringConfigDto.class);
 
         OutfitDto after = restTemplate.getForEntity(

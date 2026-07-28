@@ -22,8 +22,8 @@ import java.util.Set;
  * Singleton row (fixed id) holding the user's evolving style profile, built up
  * by merging structured preferences extracted from each piece of style
  * feedback. There is exactly one row ever, following the same pattern as
- * ScoringConfigEntity. Store-and-display only for now - nothing here feeds
- * back into TagMatcher/OutfitScoringService/ScoringConfig; that's future work.
+ * ScoringConfigEntity. Feeds into scoring via ProfileAffinityService, which
+ * judges how well a given item aligns with likes/dislikes/styleTags here.
  */
 @Entity
 @Table(name = "style_profile")
@@ -50,6 +50,12 @@ public class StyleProfileEntity {
     @CollectionTable(name = "style_profile_style_tags", joinColumns = @JoinColumn(name = "style_profile_id"))
     @Column(name = "style_tag")
     private Set<String> styleTags = new HashSet<>();
+
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "style_profile_dislikes", joinColumns = @JoinColumn(name = "style_profile_id"))
+    @Column(name = "dislike_value")
+    private Set<String> dislikes = new HashSet<>();
 
     @Column(columnDefinition = "TEXT")
     private String reasoningSummary;

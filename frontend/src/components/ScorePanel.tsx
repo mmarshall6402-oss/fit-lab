@@ -1,4 +1,4 @@
-import type { InputMethod, OutfitDto, StyleFeedbackDto } from '../types'
+import type { InputMethod, OutfitDto, Sentiment, StyleFeedbackDto } from '../types'
 import { StyleFeedbackForm } from './StyleFeedbackForm'
 
 function tier(score: number): { label: string; color: string } {
@@ -10,7 +10,7 @@ function tier(score: number): { label: string; color: string } {
 interface Props {
   outfit: OutfitDto | null
   loading: boolean
-  onSubmitFeedback: (rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
+  onSubmitFeedback: (rawText: string, inputMethod: InputMethod, sentiment: Sentiment) => Promise<StyleFeedbackDto>
 }
 
 export function ScorePanel({ outfit, loading, onSubmitFeedback }: Props) {

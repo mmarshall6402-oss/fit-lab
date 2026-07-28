@@ -1,4 +1,4 @@
-import type { Category, InputMethod, ItemDto, OutfitDto, Slots, StyleFeedbackDto } from '../types'
+import type { Category, InputMethod, ItemDto, OutfitDto, Sentiment, Slots, StyleFeedbackDto } from '../types'
 import { CATEGORIES } from '../types'
 import { OutfitSlot } from './OutfitSlot'
 import { ScorePanel } from './ScorePanel'
@@ -15,7 +15,7 @@ interface Props {
   onSetAnchor: (category: Category) => void
   onPick: (item: ItemDto) => void
   onGenerate: () => void
-  onSubmitOutfitFeedback: (rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
+  onSubmitOutfitFeedback: (rawText: string, inputMethod: InputMethod, sentiment: Sentiment) => Promise<StyleFeedbackDto>
 }
 
 export function OutfitBuilder({

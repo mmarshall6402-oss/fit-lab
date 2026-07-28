@@ -13,7 +13,8 @@ public record ScoringConfig(
         Set<String> neutralColors,
         boolean sharedVibeReasonEnabled,
         boolean sharedColorReasonEnabled,
-        boolean neutralCounterbalanceReasonEnabled
+        boolean neutralCounterbalanceReasonEnabled,
+        double profileWeight
 ) {
     public static ScoringConfig defaults() {
         return new ScoringConfig(
@@ -23,7 +24,8 @@ public record ScoringConfig(
                 Set.of("black", "white", "grey", "gray", "beige", "tan", "navy", "cream", "khaki"),
                 true,
                 true,
-                true
+                true,
+                2.0
         );
     }
 }

@@ -6,13 +6,17 @@ import com.fitlab.backend.dto.ItemDto;
 import com.fitlab.backend.dto.OutfitDto;
 import com.fitlab.backend.exception.InsufficientCatalogException;
 import com.fitlab.backend.exception.ItemNotFoundException;
+import com.fitlab.backend.matching.ProfileAffinityResolver;
 import com.fitlab.backend.repository.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,17 +29,28 @@ public class OutfitService {
 
     private final ItemRepository itemRepository;
     private final OutfitScoringService scoringService;
+    private final ProfileAffinityResolver profileAffinityResolver;
     private final Random random;
 
     @Autowired
+    public OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService, ProfileAffinityResolver profileAffinityResolver) {
+        this(itemRepository, scoringService, profileAffinityResolver, new Random());
+    }
+
+    /** Falls back to neutral profile affinity for callers outside the Spring context (e.g. plain unit tests). */
     public OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService) {
-        this(itemRepository, scoringService, new Random());
+        this(itemRepository, scoringService, items -> Map.of(), new Random());
     }
 
     /** Package-private: lets tests inject a Random with a fixed nextInt() to make tie-breaking deterministic. */
     OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService, Random random) {
+        this(itemRepository, scoringService, items -> Map.of(), random);
+    }
+
+    OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService, ProfileAffinityResolver profileAffinityResolver, Random random) {
         this.itemRepository = itemRepository;
         this.scoringService = scoringService;
+        this.profileAffinityResolver = profileAffinityResolver;
         this.random = random;
     }
 
@@ -45,6 +60,15 @@ public class OutfitService {
         List<Item> shirts = candidatesFor(Category.SHIRT, anchor);
         List<Item> bottoms = candidatesFor(Category.BOTTOM, anchor);
         List<Item> shoes = candidatesFor(Category.SHOES, anchor);
+
+        // Resolve profile affinity ONCE for every distinct item this request will touch, not per
+        // combination - the triple loop below can evaluate hundreds/thousands of combos, and each
+        // one reuses only 3 already-resolved values instead of triggering its own cache lookup/AI call.
+        Set<Item> touched = new LinkedHashSet<>();
+        touched.addAll(shirts);
+        touched.addAll(bottoms);
+        touched.addAll(shoes);
+        Map<UUID, Double> affinity = profileAffinityResolver.resolve(touched);
 
         // Collect every combo tied for the best score instead of keeping only the
         // first one hit in catalog order - a strict ">" comparison here always
@@ -58,7 +82,7 @@ public class OutfitService {
         for (Item shirt : shirts) {
             for (Item bottom : bottoms) {
                 for (Item shoe : shoes) {
-                    double score = scoringService.holisticScore(shirt, bottom, shoe);
+                    double score = scoringService.holisticScore(shirt, bottom, shoe, affinity);
                     if (score > bestScore) {
                         bestScore = score;
                         bestCombos.clear();

@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import type { InputMethod, StyleFeedbackDto } from '../types'
+import type { InputMethod, Sentiment, StyleFeedbackDto } from '../types'
 
 interface Props {
-  onSubmit: (rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
+  onSubmit: (rawText: string, inputMethod: InputMethod, sentiment: Sentiment) => Promise<StyleFeedbackDto>
   label?: string
 }
 
 /**
- * Shared "why do you like this" capture widget - a textarea plus an optional
- * mic button that transcribes speech to text live via the browser's native
- * SpeechRecognition API (no audio ever leaves the client). Works identically
- * for item-level and outfit-level feedback; the caller just wires onSubmit.
+ * Shared "why do you like this" capture widget - a like/dislike toggle, a
+ * textarea, and an optional mic button that transcribes speech to text live
+ * via the browser's native SpeechRecognition API (no audio ever leaves the
+ * client). Works identically for item-level and outfit-level feedback; the
+ * caller just wires onSubmit.
  */
 export function StyleFeedbackForm({ onSubmit, label = 'Why do you like this?' }: Props) {
+  const [sentiment, setSentiment] = useState<Sentiment>('LIKE')
   const [text, setText] = useState('')
   const [inputMethod, setInputMethod] = useState<InputMethod>('TEXT')
   const [listening, setListening] = useState(false)
@@ -62,9 +64,10 @@ export function StyleFeedbackForm({ onSubmit, label = 'Why do you like this?' }:
     setError(null)
     setSaved(null)
     try {
-      const feedback = await onSubmit(text.trim(), inputMethod)
+      const feedback = await onSubmit(text.trim(), inputMethod, sentiment)
       setText('')
       setInputMethod('TEXT')
+      setSentiment('LIKE')
       setSaved(feedback.extractionSucceeded ? 'full' : 'pending')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save your feedback.')
@@ -75,7 +78,29 @@ export function StyleFeedbackForm({ onSubmit, label = 'Why do you like this?' }:
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 rounded-lg border border-white/10 bg-black/20 p-3">
-      <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{label}</span>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{label}</span>
+        <div className="flex gap-1 rounded-full border border-white/10 bg-black/30 p-0.5">
+          <button
+            type="button"
+            onClick={() => setSentiment('LIKE')}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide cursor-pointer ${
+              sentiment === 'LIKE' ? 'bg-accent text-ink' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            👍 Works
+          </button>
+          <button
+            type="button"
+            onClick={() => setSentiment('DISLIKE')}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide cursor-pointer ${
+              sentiment === 'DISLIKE' ? 'bg-red-400 text-ink' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            👎 Doesn't work
+          </button>
+        </div>
+      </div>
       <div className="flex gap-2">
         <textarea
           value={text}
@@ -83,7 +108,11 @@ export function StyleFeedbackForm({ onSubmit, label = 'Why do you like this?' }:
             setText(e.target.value)
             setSaved(null)
           }}
-          placeholder="e.g. the oversized jacket balances the slim pants, and the neutral colors keep it clean…"
+          placeholder={
+            sentiment === 'LIKE'
+              ? 'e.g. the oversized jacket balances the slim pants, and the neutral colors keep it clean…'
+              : "e.g. the colors clash and the fit feels boxy…"
+          }
           rows={3}
           className="flex-1 resize-none rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-accent"
         />

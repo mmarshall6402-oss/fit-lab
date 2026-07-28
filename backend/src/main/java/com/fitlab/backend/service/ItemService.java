@@ -5,6 +5,7 @@ import com.fitlab.backend.domain.Item;
 import com.fitlab.backend.dto.CreateItemRequest;
 import com.fitlab.backend.dto.ItemDto;
 import com.fitlab.backend.exception.ItemNotFoundException;
+import com.fitlab.backend.repository.ItemProfileAffinityRepository;
 import com.fitlab.backend.repository.ItemRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +21,16 @@ public class ItemService {
 
     private final ItemRepository itemRepository;
     private final ImageTaggingService imageTaggingService;
+    private final ItemProfileAffinityRepository affinityRepository;
 
-    public ItemService(ItemRepository itemRepository, ImageTaggingService imageTaggingService) {
+    public ItemService(
+            ItemRepository itemRepository,
+            ImageTaggingService imageTaggingService,
+            ItemProfileAffinityRepository affinityRepository
+    ) {
         this.itemRepository = itemRepository;
         this.imageTaggingService = imageTaggingService;
+        this.affinityRepository = affinityRepository;
     }
 
     @Transactional(readOnly = true)
@@ -50,7 +57,11 @@ public class ItemService {
         item.setCategory(request.category());
         item.setColors(normalize(request.colors()));
         item.setVibes(normalize(request.vibes()));
-        return ItemDto.from(itemRepository.save(item));
+        ItemDto updated = ItemDto.from(itemRepository.save(item));
+        // Colors/vibes may have changed, so any cached profile-affinity judgment (which was based on
+        // the old tags) is stale - drop it so the next score/recommend request recomputes it fresh.
+        affinityRepository.deleteByItemId(id);
+        return updated;
     }
 
     @Transactional
@@ -59,12 +70,14 @@ public class ItemService {
             throw new ItemNotFoundException(id);
         }
         itemRepository.deleteById(id);
+        affinityRepository.deleteByItemId(id);
     }
 
     /** Wipes every item in the catalog. Admin-only - see AdminController. */
     @Transactional
     public void deleteAll() {
         itemRepository.deleteAll();
+        affinityRepository.deleteAll();
     }
 
     @Transactional
@@ -90,6 +103,7 @@ public class ItemService {
                 .ifPresent(suggestion -> {
                     item.setColors(normalize(toSet(suggestion.colors())));
                     item.setVibes(normalize(toSet(suggestion.vibes())));
+                    affinityRepository.deleteByItemId(id);
                 });
         return ItemDto.from(itemRepository.save(item));
     }

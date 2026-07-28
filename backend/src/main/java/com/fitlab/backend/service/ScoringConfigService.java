@@ -49,6 +49,7 @@ public class ScoringConfigService implements ScoringConfigProvider {
                 .orElseGet(() -> ScoringConfigEntity.builder().id(ScoringConfigEntity.SINGLETON_ID).build());
         entity.setColorWeight(request.colorWeight());
         entity.setVibeWeight(request.vibeWeight());
+        entity.setProfileWeight(request.profileWeight());
         entity.setNeutralColorThreshold(request.neutralColorThreshold());
         entity.setNeutralColors(normalize(request.neutralColors()));
         entity.setSharedVibeReasonEnabled(request.sharedVibeReasonEnabled());
@@ -81,6 +82,7 @@ public class ScoringConfigService implements ScoringConfigProvider {
                 .id(ScoringConfigEntity.SINGLETON_ID)
                 .colorWeight(config.colorWeight())
                 .vibeWeight(config.vibeWeight())
+                .profileWeight(config.profileWeight())
                 .neutralColorThreshold(config.neutralColorThreshold())
                 .neutralColors(new HashSet<>(config.neutralColors()))
                 .sharedVibeReasonEnabled(config.sharedVibeReasonEnabled())
@@ -97,7 +99,8 @@ public class ScoringConfigService implements ScoringConfigProvider {
                 Set.copyOf(entity.getNeutralColors()),
                 entity.isSharedVibeReasonEnabled(),
                 entity.isSharedColorReasonEnabled(),
-                entity.isNeutralCounterbalanceReasonEnabled()
+                entity.isNeutralCounterbalanceReasonEnabled(),
+                entity.getProfileWeight()
         );
     }
 }

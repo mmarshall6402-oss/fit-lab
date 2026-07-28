@@ -7,6 +7,7 @@ import com.anthropic.models.messages.StructuredMessage;
 import com.anthropic.models.messages.StructuredMessageCreateParams;
 import com.anthropic.models.messages.StructuredTextBlock;
 import com.fitlab.backend.domain.FeedbackTarget;
+import com.fitlab.backend.domain.Sentiment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,7 +43,7 @@ public class StyleExtractionService {
     }
 
     /** Empty when disabled, rawText is blank, or the API call fails. */
-    public Optional<StyleExtractionSuggestion> extract(String rawText, FeedbackTarget target) {
+    public Optional<StyleExtractionSuggestion> extract(String rawText, FeedbackTarget target, Sentiment sentiment) {
         if (client == null || rawText == null || rawText.isBlank()) {
             return Optional.empty();
         }
@@ -52,7 +53,7 @@ public class StyleExtractionService {
                     .model(model)
                     .maxTokens(512L)
                     .outputConfig(StyleExtractionSuggestion.class)
-                    .addUserMessage(promptFor(rawText, target))
+                    .addUserMessage(promptFor(rawText, target, sentiment))
                     .build();
 
             StructuredMessage<StyleExtractionSuggestion> response = client.messages().create(params);
@@ -66,8 +67,17 @@ public class StyleExtractionService {
         }
     }
 
-    private String promptFor(String rawText, FeedbackTarget target) {
+    private String promptFor(String rawText, FeedbackTarget target, Sentiment sentiment) {
         String subject = target == FeedbackTarget.ITEM ? "a specific clothing item" : "a full outfit combination";
+        if (sentiment == Sentiment.DISLIKE) {
+            return "A user of a wardrobe-matching app just explained why they DON'T like " + subject + ". "
+                    + "Their words: \"" + rawText + "\". "
+                    + "Extract concrete things they say don't work for them (short lowercase phrases, e.g. "
+                    + "\"boxy fits\", \"clashing colors\"), style/vibe tags implied by what they're rejecting "
+                    + "(short lowercase tags in the same vocabulary as clothing \"vibes\" like street, clean, "
+                    + "minimal, grunge, luxury, sporty), and restate their core reasoning as one normalized "
+                    + "sentence phrased as what to avoid, not what they like.";
+        }
         return "A user of a wardrobe-matching app just explained why they like " + subject + ". "
                 + "Their words: \"" + rawText + "\". "
                 + "Extract concrete things they say they like, style/vibe tags implied by their reasoning "

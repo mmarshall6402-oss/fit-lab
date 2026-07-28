@@ -1,5 +1,5 @@
 import { useStyleProfile } from '../hooks/useStyleProfile'
-import { PlainTag } from './Tag'
+import { DislikeTag, PlainTag } from './Tag'
 
 export function StyleProfilePage() {
   const { profile, loading, error } = useStyleProfile()
@@ -37,6 +37,17 @@ export function StyleProfilePage() {
                 <p className="text-sm text-neutral-500">Nothing extracted yet.</p>
               ) : (
                 profile.likes.map((like) => <PlainTag key={like} label={like} />)
+              )}
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3 rounded-lg border border-white/10 p-5">
+            <h2 className="font-mono text-sm font-bold uppercase tracking-widest text-neutral-400">Dislikes</h2>
+            <div className="flex flex-wrap gap-1.5">
+              {profile.dislikes.length === 0 ? (
+                <p className="text-sm text-neutral-500">Nothing extracted yet.</p>
+              ) : (
+                profile.dislikes.map((dislike) => <DislikeTag key={dislike} label={dislike} />)
               )}
             </div>
           </section>

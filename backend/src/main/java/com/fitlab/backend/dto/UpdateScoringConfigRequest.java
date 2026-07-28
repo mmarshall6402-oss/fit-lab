@@ -16,6 +16,7 @@ public record UpdateScoringConfigRequest(
         @NotNull Set<String> neutralColors,
         boolean sharedVibeReasonEnabled,
         boolean sharedColorReasonEnabled,
-        boolean neutralCounterbalanceReasonEnabled
+        boolean neutralCounterbalanceReasonEnabled,
+        @PositiveOrZero double profileWeight
 ) {
 }

@@ -31,3 +31,6 @@ fitlab:
     # Model used to extract structured style preferences from free-text style
     # feedback. Same ANTHROPIC_API_KEY gate and fail-soft behavior as above.
     style-model: ${FITLAB_STYLE_MODEL:claude-opus-5}
+    # Model used to judge how well an item aligns with the style profile.
+    # Same ANTHROPIC_API_KEY gate and fail-soft behavior as above.
+    affinity-model: ${FITLAB_AFFINITY_MODEL:claude-opus-5}

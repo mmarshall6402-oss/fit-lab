@@ -56,14 +56,27 @@ public class StyleFeedback {
     @Column(nullable = false)
     private InputMethod inputMethod;
 
+    /** Whether this feedback explains what the user likes or what doesn't work for them. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Sentiment sentiment;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String rawText;
 
+    /** Populated only when sentiment == LIKE. */
     @Builder.Default
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "style_feedback_likes", joinColumns = @JoinColumn(name = "style_feedback_id"))
     @Column(name = "like_value")
     private Set<String> extractedLikes = new HashSet<>();
+
+    /** Populated only when sentiment == DISLIKE. */
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "style_feedback_dislikes", joinColumns = @JoinColumn(name = "style_feedback_id"))
+    @Column(name = "dislike_value")
+    private Set<String> extractedDislikes = new HashSet<>();
 
     @Builder.Default
     @ElementCollection(fetch = FetchType.EAGER)

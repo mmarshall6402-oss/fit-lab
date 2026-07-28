@@ -43,6 +43,9 @@ public class ScoringConfigEntity {
     private double vibeWeight;
 
     @Column(nullable = false)
+    private double profileWeight;
+
+    @Column(nullable = false)
     private int neutralColorThreshold;
 
     @Builder.Default

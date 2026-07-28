@@ -6,7 +6,7 @@ import java.util.List;
 
 /** Structured-output shape asked of the model when extracting style preferences from free-text reasoning. */
 record StyleExtractionSuggestion(
-        @JsonPropertyDescription("1-5 short lowercase phrases naming specific things the user says they like, e.g. \"oversized fits\", \"contrast stitching\", \"the color combo\"")
+        @JsonPropertyDescription("1-5 short lowercase phrases naming specific things the user says they like or dislike (per the sentiment of this feedback), e.g. \"oversized fits\", \"contrast stitching\", \"the color combo\"")
         List<String> likes,
         @JsonPropertyDescription("1-5 lowercase style/vibe tags implied by the reasoning, using the same vocabulary as clothing vibes, e.g. street, clean, minimal, grunge, luxury, sporty")
         List<String> style,

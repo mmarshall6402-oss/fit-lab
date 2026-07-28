@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useCatalog } from './hooks/useCatalog'
 import { useStyleProfile } from './hooks/useStyleProfile'
 import { api } from './api/client'
-import { CATEGORIES, type Category, type InputMethod, type ItemDto, type OutfitDto, type Slots } from './types'
+import { CATEGORIES, type Category, type InputMethod, type ItemDto, type OutfitDto, type Sentiment, type Slots } from './types'
 import { Header } from './components/Header'
 import { CatalogPanel } from './components/CatalogPanel'
 import { OutfitBuilder } from './components/OutfitBuilder'
@@ -83,7 +83,7 @@ export default function App() {
     if (slots[category]) setPinnedAnchor(category)
   }
 
-  function handleSubmitOutfitFeedback(rawText: string, inputMethod: InputMethod) {
+  function handleSubmitOutfitFeedback(rawText: string, inputMethod: InputMethod, sentiment: Sentiment) {
     if (!outfit) return Promise.reject(new Error('No scored outfit to give feedback on.'))
     return submitOutfitFeedback({
       shirtId: outfit.shirt.id,
@@ -91,6 +91,7 @@ export default function App() {
       shoesId: outfit.shoes.id,
       rawText,
       inputMethod,
+      sentiment,
     })
   }
 

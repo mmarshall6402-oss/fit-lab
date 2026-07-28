@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { Category, CreateItemRequest, InputMethod, ItemDto, Slots, StyleFeedbackDto } from '../types'
+import type { Category, CreateItemRequest, InputMethod, ItemDto, Sentiment, Slots, StyleFeedbackDto } from '../types'
 import { CATEGORIES } from '../types'
 import { ItemCard } from './ItemCard'
 import { CategoryIcon } from './CategoryIcon'
@@ -18,7 +18,12 @@ interface Props {
   onDelete: (id: string) => void
   onCreate: (request: CreateItemRequest) => Promise<ItemDto>
   onUploadImage: (id: string, file: File) => Promise<ItemDto>
-  onSubmitItemFeedback: (itemId: string, rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
+  onSubmitItemFeedback: (
+    itemId: string,
+    rawText: string,
+    inputMethod: InputMethod,
+    sentiment: Sentiment,
+  ) => Promise<StyleFeedbackDto>
 }
 
 /** Strips the extension and swaps separators for spaces, e.g. "aj1-fragment.png" -> "aj1 fragment". */
@@ -179,7 +184,9 @@ export function CatalogPanel({
       {feedbackItem && (
         <ItemFeedbackModal
           item={feedbackItem}
-          onSubmit={(rawText, inputMethod) => onSubmitItemFeedback(feedbackItem.id, rawText, inputMethod)}
+          onSubmit={(rawText, inputMethod, sentiment) =>
+            onSubmitItemFeedback(feedbackItem.id, rawText, inputMethod, sentiment)
+          }
           onClose={() => setFeedbackItem(null)}
         />
       )}

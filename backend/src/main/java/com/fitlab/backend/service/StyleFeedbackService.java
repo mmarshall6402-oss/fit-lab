@@ -4,6 +4,7 @@ import com.fitlab.backend.domain.Category;
 import com.fitlab.backend.domain.FeedbackTarget;
 import com.fitlab.backend.domain.InputMethod;
 import com.fitlab.backend.domain.Item;
+import com.fitlab.backend.domain.Sentiment;
 import com.fitlab.backend.domain.StyleFeedback;
 import com.fitlab.backend.domain.StyleProfileEntity;
 import com.fitlab.backend.dto.StyleFeedbackDto;
@@ -25,11 +26,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Captures raw style feedback (why a user likes an item or an outfit combo),
- * extracts structured preferences from it, and merges those into a single
- * evolving style profile. Store-and-display only for now: nothing here feeds
- * back into TagMatcher/OutfitScoringService/ScoringConfig - that's explicit
- * future work.
+ * Captures raw style feedback (why a user likes or dislikes an item or an
+ * outfit combo), extracts structured preferences from it, and merges those
+ * into a single evolving style profile. That profile feeds into scoring via
+ * ProfileAffinityService, which reads it back to judge how well an item
+ * aligns with what's been captured here.
  */
 @Service
 public class StyleFeedbackService {
@@ -54,17 +55,19 @@ public class StyleFeedbackService {
     }
 
     @Transactional
-    public StyleFeedbackDto submitForItem(UUID itemId, String rawText, InputMethod inputMethod) {
+    public StyleFeedbackDto submitForItem(UUID itemId, String rawText, InputMethod inputMethod, Sentiment sentiment) {
         requireItem(itemId, null);
-        return submit(FeedbackTarget.ITEM, itemId, null, null, null, rawText, inputMethod);
+        return submit(FeedbackTarget.ITEM, itemId, null, null, null, rawText, inputMethod, sentiment);
     }
 
     @Transactional
-    public StyleFeedbackDto submitForOutfit(UUID shirtId, UUID bottomId, UUID shoesId, String rawText, InputMethod inputMethod) {
+    public StyleFeedbackDto submitForOutfit(
+            UUID shirtId, UUID bottomId, UUID shoesId, String rawText, InputMethod inputMethod, Sentiment sentiment
+    ) {
         requireItem(shirtId, Category.SHIRT);
         requireItem(bottomId, Category.BOTTOM);
         requireItem(shoesId, Category.SHOES);
-        return submit(FeedbackTarget.OUTFIT, null, shirtId, bottomId, shoesId, rawText, inputMethod);
+        return submit(FeedbackTarget.OUTFIT, null, shirtId, bottomId, shoesId, rawText, inputMethod, sentiment);
     }
 
     @Transactional(readOnly = true)
@@ -79,9 +82,10 @@ public class StyleFeedbackService {
 
     private StyleFeedbackDto submit(
             FeedbackTarget target, UUID itemId, UUID shirtId, UUID bottomId, UUID shoesId,
-            String rawText, InputMethod inputMethod
+            String rawText, InputMethod inputMethod, Sentiment sentiment
     ) {
-        Optional<StyleExtractionSuggestion> suggestion = extractionService.extract(rawText, target);
+        Optional<StyleExtractionSuggestion> suggestion = extractionService.extract(rawText, target, sentiment);
+        boolean isLike = sentiment == Sentiment.LIKE;
 
         StyleFeedback feedback = StyleFeedback.builder()
                 .id(UUID.randomUUID())
@@ -91,27 +95,33 @@ public class StyleFeedbackService {
                 .bottomId(bottomId)
                 .shoesId(shoesId)
                 .inputMethod(inputMethod)
+                .sentiment(sentiment)
                 .rawText(rawText)
                 .extractionSucceeded(suggestion.isPresent())
-                .extractedLikes(suggestion.map(s -> normalize(s.likes())).orElseGet(HashSet::new))
+                .extractedLikes(isLike ? suggestion.map(s -> normalize(s.likes())).orElseGet(HashSet::new) : new HashSet<>())
+                .extractedDislikes(!isLike ? suggestion.map(s -> normalize(s.likes())).orElseGet(HashSet::new) : new HashSet<>())
                 .extractedStyleTags(suggestion.map(s -> normalize(s.style())).orElseGet(HashSet::new))
                 .extractedReasoning(suggestion.map(StyleExtractionSuggestion::reasoning).orElse(null))
                 .createdAt(Instant.now())
                 .build();
         feedback = feedbackRepository.save(feedback);
 
-        suggestion.ifPresent(s -> mergeIntoProfile(target, s));
+        suggestion.ifPresent(s -> mergeIntoProfile(target, sentiment, s));
 
         return StyleFeedbackDto.from(feedback);
     }
 
-    private void mergeIntoProfile(FeedbackTarget target, StyleExtractionSuggestion suggestion) {
+    private void mergeIntoProfile(FeedbackTarget target, Sentiment sentiment, StyleExtractionSuggestion suggestion) {
         StyleProfileEntity profile = loadOrInitializeProfile();
 
-        profile.getLikes().addAll(normalize(suggestion.likes()));
+        if (sentiment == Sentiment.LIKE) {
+            profile.getLikes().addAll(normalize(suggestion.likes()));
+        } else {
+            profile.getDislikes().addAll(normalize(suggestion.likes()));
+        }
         profile.getStyleTags().addAll(normalize(suggestion.style()));
 
-        String label = target == FeedbackTarget.ITEM ? "[item] " : "[outfit] ";
+        String label = "[" + target.name().toLowerCase() + "·" + sentiment.name().toLowerCase() + "] ";
         List<String> lines = new ArrayList<>();
         lines.add(label + suggestion.reasoning());
         if (profile.getReasoningSummary() != null && !profile.getReasoningSummary().isBlank()) {

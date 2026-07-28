@@ -11,7 +11,8 @@ public record ScoringConfigDto(
         Set<String> neutralColors,
         boolean sharedVibeReasonEnabled,
         boolean sharedColorReasonEnabled,
-        boolean neutralCounterbalanceReasonEnabled
+        boolean neutralCounterbalanceReasonEnabled,
+        double profileWeight
 ) {
     public static ScoringConfigDto from(ScoringConfig config) {
         return new ScoringConfigDto(
@@ -21,7 +22,8 @@ public record ScoringConfigDto(
                 config.neutralColors(),
                 config.sharedVibeReasonEnabled(),
                 config.sharedColorReasonEnabled(),
-                config.neutralCounterbalanceReasonEnabled()
+                config.neutralCounterbalanceReasonEnabled(),
+                config.profileWeight()
         );
     }
 }

@@ -7,6 +7,7 @@ import java.util.List;
 
 public record StyleProfileDto(
         List<String> likes,
+        List<String> dislikes,
         List<String> styleTags,
         String reasoningSummary,
         int feedbackCount,
@@ -15,6 +16,7 @@ public record StyleProfileDto(
     public static StyleProfileDto from(StyleProfileEntity entity) {
         return new StyleProfileDto(
                 List.copyOf(entity.getLikes()),
+                List.copyOf(entity.getDislikes()),
                 List.copyOf(entity.getStyleTags()),
                 entity.getReasoningSummary() == null ? "" : entity.getReasoningSummary(),
                 entity.getFeedbackCount(),

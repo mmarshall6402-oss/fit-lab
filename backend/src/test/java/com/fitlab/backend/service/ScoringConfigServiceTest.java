@@ -37,7 +37,7 @@ class ScoringConfigServiceTest {
         service.loadOrInitialize();
 
         ScoringConfig updated = service.update(new UpdateScoringConfigRequest(
-                5.0, 1.0, 2, Set.of("black", "Beige "), false, true, false));
+                5.0, 1.0, 2, Set.of("black", "Beige "), false, true, false, 2.0));
 
         assertThat(service.current()).isEqualTo(updated);
         assertThat(updated.colorWeight()).isEqualTo(5.0);
@@ -52,7 +52,7 @@ class ScoringConfigServiceTest {
     void resetRestoresDefaultsAfterAnUpdate() {
         ScoringConfigService service = new ScoringConfigService(repository);
         service.loadOrInitialize();
-        service.update(new UpdateScoringConfigRequest(10.0, 10.0, 0, Set.of(), false, false, false));
+        service.update(new UpdateScoringConfigRequest(10.0, 10.0, 0, Set.of(), false, false, false, 5.0));
 
         ScoringConfig reset = service.resetToDefaults();
 

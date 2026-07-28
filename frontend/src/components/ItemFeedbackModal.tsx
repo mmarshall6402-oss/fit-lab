@@ -1,9 +1,9 @@
-import type { InputMethod, ItemDto, StyleFeedbackDto } from '../types'
+import type { InputMethod, ItemDto, Sentiment, StyleFeedbackDto } from '../types'
 import { StyleFeedbackForm } from './StyleFeedbackForm'
 
 interface Props {
   item: ItemDto
-  onSubmit: (rawText: string, inputMethod: InputMethod) => Promise<StyleFeedbackDto>
+  onSubmit: (rawText: string, inputMethod: InputMethod, sentiment: Sentiment) => Promise<StyleFeedbackDto>
   onClose: () => void
 }
 

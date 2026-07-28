@@ -29,14 +29,15 @@ public class StyleFeedbackController {
     @PostMapping("/items/{id}/feedback")
     @ResponseStatus(HttpStatus.CREATED)
     public StyleFeedbackDto submitItemFeedback(@PathVariable UUID id, @Valid @RequestBody SubmitItemFeedbackRequest request) {
-        return styleFeedbackService.submitForItem(id, request.rawText(), request.inputMethod());
+        return styleFeedbackService.submitForItem(id, request.rawText(), request.inputMethod(), request.sentiment());
     }
 
     @PostMapping("/outfit/feedback")
     @ResponseStatus(HttpStatus.CREATED)
     public StyleFeedbackDto submitOutfitFeedback(@Valid @RequestBody SubmitOutfitFeedbackRequest request) {
         return styleFeedbackService.submitForOutfit(
-                request.shirtId(), request.bottomId(), request.shoesId(), request.rawText(), request.inputMethod());
+                request.shirtId(), request.bottomId(), request.shoesId(),
+                request.rawText(), request.inputMethod(), request.sentiment());
     }
 
     @GetMapping("/style-profile")

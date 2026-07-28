@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { InputMethod, StyleFeedbackDto, StyleProfileDto, SubmitOutfitFeedbackRequest } from '../types'
+import type { InputMethod, Sentiment, StyleFeedbackDto, StyleProfileDto, SubmitOutfitFeedbackRequest } from '../types'
 
 export function useStyleProfile() {
   const [profile, setProfile] = useState<StyleProfileDto | null>(null)
@@ -24,8 +24,8 @@ export function useStyleProfile() {
   }, [refresh])
 
   const submitItemFeedback = useCallback(
-    async (itemId: string, rawText: string, inputMethod: InputMethod): Promise<StyleFeedbackDto> => {
-      const feedback = await api.submitItemFeedback(itemId, { rawText, inputMethod })
+    async (itemId: string, rawText: string, inputMethod: InputMethod, sentiment: Sentiment): Promise<StyleFeedbackDto> => {
+      const feedback = await api.submitItemFeedback(itemId, { rawText, inputMethod, sentiment })
       await refresh()
       return feedback
     },

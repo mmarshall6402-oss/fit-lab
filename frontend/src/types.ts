@@ -59,10 +59,12 @@ export interface ScoringConfigDto {
   sharedVibeReasonEnabled: boolean
   sharedColorReasonEnabled: boolean
   neutralCounterbalanceReasonEnabled: boolean
+  profileWeight: number
 }
 
 export type FeedbackTarget = 'ITEM' | 'OUTFIT'
 export type InputMethod = 'TEXT' | 'VOICE'
+export type Sentiment = 'LIKE' | 'DISLIKE'
 
 export interface StyleFeedbackDto {
   id: string
@@ -72,9 +74,11 @@ export interface StyleFeedbackDto {
   bottomId: string | null
   shoesId: string | null
   inputMethod: InputMethod
+  sentiment: Sentiment
   rawText: string
   extractionSucceeded: boolean
   extractedLikes: string[]
+  extractedDislikes: string[]
   extractedStyleTags: string[]
   extractedReasoning: string | null
   createdAt: string
@@ -82,6 +86,7 @@ export interface StyleFeedbackDto {
 
 export interface StyleProfileDto {
   likes: string[]
+  dislikes: string[]
   styleTags: string[]
   reasoningSummary: string
   feedbackCount: number
@@ -91,6 +96,7 @@ export interface StyleProfileDto {
 export interface SubmitItemFeedbackRequest {
   rawText: string
   inputMethod: InputMethod
+  sentiment: Sentiment
 }
 
 export interface SubmitOutfitFeedbackRequest {
@@ -99,4 +105,5 @@ export interface SubmitOutfitFeedbackRequest {
   shoesId: string
   rawText: string
   inputMethod: InputMethod
+  sentiment: Sentiment
 }
