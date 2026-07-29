@@ -23,6 +23,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
+    @ExceptionHandler(SavedOutfitNotFoundException.class)
+    public ResponseEntity<Object> handleNotFound(SavedOutfitNotFoundException ex) {
+        return error(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
     @ExceptionHandler(InsufficientCatalogException.class)
     public ResponseEntity<Object> handleInsufficientCatalog(InsufficientCatalogException ex) {
         return error(HttpStatus.CONFLICT, ex.getMessage());

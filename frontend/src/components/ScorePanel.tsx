@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { InputMethod, OutfitDto, Sentiment, StyleFeedbackDto } from '../types'
 import { StyleFeedbackForm } from './StyleFeedbackForm'
 
@@ -11,9 +12,14 @@ interface Props {
   outfit: OutfitDto | null
   loading: boolean
   onSubmitFeedback: (rawText: string, inputMethod: InputMethod, sentiment: Sentiment) => Promise<StyleFeedbackDto>
+  onSaveOutfit: () => Promise<void>
 }
 
-export function ScorePanel({ outfit, loading, onSubmitFeedback }: Props) {
+export function ScorePanel({ outfit, loading, onSubmitFeedback, onSaveOutfit }: Props) {
+  const [saving, setSaving] = useState(false)
+  const [savedKey, setSavedKey] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   if (loading) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-white/10 bg-black/30 p-6">
@@ -23,6 +29,22 @@ export function ScorePanel({ outfit, loading, onSubmitFeedback }: Props) {
   }
 
   if (!outfit) return null
+
+  const outfitKey = `${outfit.shirt.id}-${outfit.bottom.id}-${outfit.shoes.id}`
+  const alreadySaved = savedKey === outfitKey
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSaveOutfit()
+      setSavedKey(outfitKey)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save this fit.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const t = tier(outfit.score)
 
@@ -50,6 +72,17 @@ export function ScorePanel({ outfit, loading, onSubmitFeedback }: Props) {
           </li>
         ))}
       </ul>
+
+      <div className="flex flex-col gap-1.5">
+        <button
+          onClick={handleSave}
+          disabled={saving || alreadySaved}
+          className="rounded-md border border-white/15 py-2 text-sm font-bold uppercase tracking-wide text-neutral-300 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+        >
+          {saving ? 'Saving…' : alreadySaved ? '✓ Saved' : '💾 Save this fit'}
+        </button>
+        {saveError && <p className="text-sm text-red-400">{saveError}</p>}
+      </div>
 
       <StyleFeedbackForm onSubmit={onSubmitFeedback} label="Why does this fit work?" />
     </div>

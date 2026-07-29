@@ -6,6 +6,8 @@ import type {
   ItemDto,
   OutfitDto,
   RecommendationDto,
+  SaveOutfitRequest,
+  SavedOutfitDto,
   ScoringConfigDto,
   StyleFeedbackDto,
   StyleProfileDto,
@@ -113,4 +115,11 @@ export const api = {
   getStyleProfile: () => request<StyleProfileDto>('/style-profile'),
 
   getStyleFeedbackHistory: () => request<StyleFeedbackDto[]>('/style-profile/history'),
+
+  saveOutfit: (saveRequest: SaveOutfitRequest) =>
+    request<SavedOutfitDto>('/outfit/saved', { method: 'POST', body: JSON.stringify(saveRequest) }),
+
+  getSavedOutfits: () => request<SavedOutfitDto[]>('/outfit/saved'),
+
+  deleteSavedOutfit: (id: string) => request<void>(`/outfit/saved/${id}`, { method: 'DELETE' }),
 }

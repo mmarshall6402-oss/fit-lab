@@ -16,6 +16,7 @@ interface Props {
   onPick: (item: ItemDto) => void
   onGenerate: () => void
   onSubmitOutfitFeedback: (rawText: string, inputMethod: InputMethod, sentiment: Sentiment) => Promise<StyleFeedbackDto>
+  onSaveOutfit: () => Promise<void>
 }
 
 export function OutfitBuilder({
@@ -30,6 +31,7 @@ export function OutfitBuilder({
   onPick,
   onGenerate,
   onSubmitOutfitFeedback,
+  onSaveOutfit,
 }: Props) {
   const filledCount = CATEGORIES.filter((c) => slots[c]).length
   const anchorItem = anchorCategory ? slots[anchorCategory] : null
@@ -66,7 +68,7 @@ export function OutfitBuilder({
         </p>
       )}
 
-      <ScorePanel outfit={outfit} loading={scoring} onSubmitFeedback={onSubmitOutfitFeedback} />
+      <ScorePanel outfit={outfit} loading={scoring} onSubmitFeedback={onSubmitOutfitFeedback} onSaveOutfit={onSaveOutfit} />
 
       {anchorItem &&
         emptyCategories.map((category) => (

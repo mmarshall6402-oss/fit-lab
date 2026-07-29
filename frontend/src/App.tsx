@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCatalog } from './hooks/useCatalog'
 import { useStyleProfile } from './hooks/useStyleProfile'
+import { useSavedOutfits } from './hooks/useSavedOutfits'
 import { api } from './api/client'
 import { CATEGORIES, type Category, type InputMethod, type ItemDto, type OutfitDto, type Sentiment, type Slots } from './types'
 import { Header } from './components/Header'
@@ -16,6 +17,7 @@ function pickDefaultAnchor(slots: Slots): Category | null {
 export default function App() {
   const { items, loading, error, createItem, deleteItem, uploadImage } = useCatalog()
   const { submitItemFeedback, submitOutfitFeedback } = useStyleProfile()
+  const { saveOutfit } = useSavedOutfits()
 
   const [activeCategory, setActiveCategory] = useState<Category>('SHIRT')
   const [slots, setSlots] = useState<Slots>(EMPTY_SLOTS)
@@ -95,6 +97,11 @@ export default function App() {
     })
   }
 
+  async function handleSaveOutfit() {
+    if (!outfit) throw new Error('No scored outfit to save.')
+    await saveOutfit(outfit.shirt.id, outfit.bottom.id, outfit.shoes.id)
+  }
+
   async function handleGenerate() {
     if (!anchorCategory) return
     const anchor = slots[anchorCategory]
@@ -142,6 +149,7 @@ export default function App() {
           onPick={handlePick}
           onGenerate={handleGenerate}
           onSubmitOutfitFeedback={handleSubmitOutfitFeedback}
+          onSaveOutfit={handleSaveOutfit}
         />
       </main>
     </div>

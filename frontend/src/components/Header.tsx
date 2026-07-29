@@ -10,6 +10,12 @@ export function Header() {
             mix. match. cop the fit.
           </p>
           <a
+            href="#saved-fits"
+            className="font-mono text-xs uppercase tracking-widest text-neutral-600 hover:text-accent"
+          >
+            Saved Fits
+          </a>
+          <a
             href="#style-profile"
             className="font-mono text-xs uppercase tracking-widest text-neutral-600 hover:text-accent"
           >

@@ -107,3 +107,18 @@ export interface SubmitOutfitFeedbackRequest {
   inputMethod: InputMethod
   sentiment: Sentiment
 }
+
+export interface SavedOutfitDto {
+  id: string
+  shirtId: string
+  bottomId: string
+  shoesId: string
+  score: number
+  createdAt: string
+}
+
+export interface SaveOutfitRequest {
+  shirtId: string
+  bottomId: string
+  shoesId: string
+}

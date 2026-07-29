@@ -4,10 +4,12 @@ import './index.css'
 import App from './App.tsx'
 import { AdminPage } from './components/AdminPage.tsx'
 import { StyleProfilePage } from './components/StyleProfilePage.tsx'
+import { SavedOutfitsPage } from './components/SavedOutfitsPage.tsx'
 
 /**
  * Hash-based routing (no server-side rewrite needed on static S3 hosting):
- * #admin opens the admin dashboard, #style-profile opens the style profile.
+ * #admin opens the admin dashboard, #style-profile opens the style profile,
+ * #saved-fits opens the saved-outfits history.
  */
 function Root() {
   const [hash, setHash] = useState(window.location.hash)
@@ -20,6 +22,7 @@ function Root() {
 
   if (hash.startsWith('#admin')) return <AdminPage />
   if (hash.startsWith('#style-profile')) return <StyleProfilePage />
+  if (hash.startsWith('#saved-fits')) return <SavedOutfitsPage />
   return <App />
 }
 
