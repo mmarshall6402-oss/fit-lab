@@ -55,33 +55,33 @@ public class StyleFeedbackService {
     }
 
     @Transactional
-    public StyleFeedbackDto submitForItem(UUID itemId, String rawText, InputMethod inputMethod, Sentiment sentiment) {
-        requireItem(itemId, null);
-        return submit(FeedbackTarget.ITEM, itemId, null, null, null, rawText, inputMethod, sentiment);
+    public StyleFeedbackDto submitForItem(UUID ownerId, UUID itemId, String rawText, InputMethod inputMethod, Sentiment sentiment) {
+        requireItem(ownerId, itemId, null);
+        return submit(ownerId, FeedbackTarget.ITEM, itemId, null, null, null, rawText, inputMethod, sentiment);
     }
 
     @Transactional
     public StyleFeedbackDto submitForOutfit(
-            UUID shirtId, UUID bottomId, UUID shoesId, String rawText, InputMethod inputMethod, Sentiment sentiment
+            UUID ownerId, UUID shirtId, UUID bottomId, UUID shoesId, String rawText, InputMethod inputMethod, Sentiment sentiment
     ) {
-        requireItem(shirtId, Category.SHIRT);
-        requireItem(bottomId, Category.BOTTOM);
-        requireItem(shoesId, Category.SHOES);
-        return submit(FeedbackTarget.OUTFIT, null, shirtId, bottomId, shoesId, rawText, inputMethod, sentiment);
+        requireItem(ownerId, shirtId, Category.SHIRT);
+        requireItem(ownerId, bottomId, Category.BOTTOM);
+        requireItem(ownerId, shoesId, Category.SHOES);
+        return submit(ownerId, FeedbackTarget.OUTFIT, null, shirtId, bottomId, shoesId, rawText, inputMethod, sentiment);
     }
 
     @Transactional(readOnly = true)
-    public StyleProfileDto getProfile() {
-        return StyleProfileDto.from(loadOrInitializeProfile());
+    public StyleProfileDto getProfile(UUID ownerId) {
+        return StyleProfileDto.from(loadOrInitializeProfile(ownerId));
     }
 
     @Transactional(readOnly = true)
-    public List<StyleFeedbackDto> getHistory() {
-        return feedbackRepository.findAllByOrderByCreatedAtDesc().stream().map(StyleFeedbackDto::from).toList();
+    public List<StyleFeedbackDto> getHistory(UUID ownerId) {
+        return feedbackRepository.findAllByOwnerIdOrderByCreatedAtDesc(ownerId).stream().map(StyleFeedbackDto::from).toList();
     }
 
     private StyleFeedbackDto submit(
-            FeedbackTarget target, UUID itemId, UUID shirtId, UUID bottomId, UUID shoesId,
+            UUID ownerId, FeedbackTarget target, UUID itemId, UUID shirtId, UUID bottomId, UUID shoesId,
             String rawText, InputMethod inputMethod, Sentiment sentiment
     ) {
         Optional<StyleExtractionSuggestion> suggestion = extractionService.extract(rawText, target, sentiment);
@@ -89,6 +89,7 @@ public class StyleFeedbackService {
 
         StyleFeedback feedback = StyleFeedback.builder()
                 .id(UUID.randomUUID())
+                .ownerId(ownerId)
                 .target(target)
                 .itemId(itemId)
                 .shirtId(shirtId)
@@ -106,13 +107,13 @@ public class StyleFeedbackService {
                 .build();
         feedback = feedbackRepository.save(feedback);
 
-        suggestion.ifPresent(s -> mergeIntoProfile(target, sentiment, s));
+        suggestion.ifPresent(s -> mergeIntoProfile(ownerId, target, sentiment, s));
 
         return StyleFeedbackDto.from(feedback);
     }
 
-    private void mergeIntoProfile(FeedbackTarget target, Sentiment sentiment, StyleExtractionSuggestion suggestion) {
-        StyleProfileEntity profile = loadOrInitializeProfile();
+    private void mergeIntoProfile(UUID ownerId, FeedbackTarget target, Sentiment sentiment, StyleExtractionSuggestion suggestion) {
+        StyleProfileEntity profile = loadOrInitializeProfile(ownerId);
 
         if (sentiment == Sentiment.LIKE) {
             profile.getLikes().addAll(normalize(suggestion.likes()));
@@ -134,17 +135,17 @@ public class StyleFeedbackService {
         profileRepository.save(profile);
     }
 
-    private StyleProfileEntity loadOrInitializeProfile() {
-        return profileRepository.findById(StyleProfileEntity.SINGLETON_ID)
+    private StyleProfileEntity loadOrInitializeProfile(UUID ownerId) {
+        return profileRepository.findById(ownerId)
                 .orElseGet(() -> profileRepository.save(StyleProfileEntity.builder()
-                        .id(StyleProfileEntity.SINGLETON_ID)
+                        .ownerId(ownerId)
                         .reasoningSummary("")
                         .updatedAt(Instant.now())
                         .build()));
     }
 
-    private void requireItem(UUID id, Category expectedCategory) {
-        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+    private void requireItem(UUID ownerId, UUID id, Category expectedCategory) {
+        Item item = itemRepository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new ItemNotFoundException(id));
         if (expectedCategory != null && item.getCategory() != expectedCategory) {
             throw new IllegalArgumentException(expectedCategory + " id does not refer to a " + expectedCategory + " item: " + id);
         }

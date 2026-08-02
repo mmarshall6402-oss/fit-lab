@@ -1,6 +1,7 @@
 package com.fitlab.backend.controller;
 
 import com.fitlab.backend.dto.AttachmentDto;
+import com.fitlab.backend.security.CurrentUser;
 import com.fitlab.backend.service.AttachmentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,18 +29,18 @@ public class AttachmentController {
 
     @GetMapping
     public List<AttachmentDto> findAll(@PathVariable UUID itemId) {
-        return attachmentService.findByItem(itemId);
+        return attachmentService.findByItem(CurrentUser.id(), itemId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public AttachmentDto create(@PathVariable UUID itemId, @RequestParam MultipartFile file) {
-        return attachmentService.create(itemId, file);
+        return attachmentService.create(CurrentUser.id(), itemId, file);
     }
 
     @DeleteMapping("/{attachmentId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID itemId, @PathVariable UUID attachmentId) {
-        attachmentService.delete(itemId, attachmentId);
+        attachmentService.delete(CurrentUser.id(), itemId, attachmentId);
     }
 }

@@ -29,14 +29,14 @@ public class AttachmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<AttachmentDto> findByItem(UUID itemId) {
-        requireItem(itemId);
+    public List<AttachmentDto> findByItem(UUID ownerId, UUID itemId) {
+        requireItem(ownerId, itemId);
         return attachmentRepository.findByItemId(itemId).stream().map(AttachmentDto::from).toList();
     }
 
     @Transactional
-    public AttachmentDto create(UUID itemId, MultipartFile file) {
-        Item item = requireItem(itemId);
+    public AttachmentDto create(UUID ownerId, UUID itemId, MultipartFile file) {
+        Item item = requireItem(ownerId, itemId);
         String url = storage.storeAttachment(file);
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
@@ -53,15 +53,15 @@ public class AttachmentService {
     }
 
     @Transactional
-    public void delete(UUID itemId, UUID attachmentId) {
-        requireItem(itemId);
+    public void delete(UUID ownerId, UUID itemId, UUID attachmentId) {
+        requireItem(ownerId, itemId);
         Attachment attachment = attachmentRepository.findById(attachmentId)
                 .filter(a -> a.getItem().getId().equals(itemId))
                 .orElseThrow(() -> new AttachmentNotFoundException(attachmentId));
         attachmentRepository.delete(attachment);
     }
 
-    private Item requireItem(UUID itemId) {
-        return itemRepository.findById(itemId).orElseThrow(() -> new ItemNotFoundException(itemId));
+    private Item requireItem(UUID ownerId, UUID itemId) {
+        return itemRepository.findByIdAndOwnerId(itemId, ownerId).orElseThrow(() -> new ItemNotFoundException(itemId));
     }
 }

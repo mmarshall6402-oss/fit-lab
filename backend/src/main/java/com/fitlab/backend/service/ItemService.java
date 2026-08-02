@@ -34,25 +34,27 @@ public class ItemService {
     }
 
     @Transactional(readOnly = true)
-    public List<ItemDto> findAll(Category category) {
-        List<Item> items = category == null ? itemRepository.findAll() : itemRepository.findByCategory(category);
+    public List<ItemDto> findAll(UUID ownerId, Category category) {
+        List<Item> items = category == null
+                ? itemRepository.findByOwnerId(ownerId)
+                : itemRepository.findByOwnerIdAndCategory(ownerId, category);
         return items.stream().map(ItemDto::from).toList();
     }
 
     @Transactional
-    public ItemDto create(CreateItemRequest request) {
-        return ItemDto.from(itemRepository.save(toEntity(request)));
+    public ItemDto create(UUID ownerId, CreateItemRequest request) {
+        return ItemDto.from(itemRepository.save(toEntity(ownerId, request)));
     }
 
     @Transactional
-    public List<ItemDto> importAll(List<CreateItemRequest> requests) {
-        List<Item> items = requests.stream().map(this::toEntity).toList();
+    public List<ItemDto> importAll(UUID ownerId, List<CreateItemRequest> requests) {
+        List<Item> items = requests.stream().map(r -> toEntity(ownerId, r)).toList();
         return itemRepository.saveAll(items).stream().map(ItemDto::from).toList();
     }
 
     @Transactional
-    public ItemDto update(UUID id, CreateItemRequest request) {
-        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+    public ItemDto update(UUID ownerId, UUID id, CreateItemRequest request) {
+        Item item = requireOwnedItem(ownerId, id);
         item.setName(request.name());
         item.setCategory(request.category());
         item.setColors(normalize(request.colors()));
@@ -65,15 +67,13 @@ public class ItemService {
     }
 
     @Transactional
-    public void delete(UUID id) {
-        if (!itemRepository.existsById(id)) {
-            throw new ItemNotFoundException(id);
-        }
+    public void delete(UUID ownerId, UUID id) {
+        requireOwnedItem(ownerId, id);
         itemRepository.deleteById(id);
         affinityRepository.deleteByItemId(id);
     }
 
-    /** Wipes every item in the catalog. Admin-only - see AdminController. */
+    /** Wipes every item in the catalog, across every account. Admin-only - see AdminController. */
     @Transactional
     public void deleteAll() {
         itemRepository.deleteAll();
@@ -81,8 +81,8 @@ public class ItemService {
     }
 
     @Transactional
-    public ItemDto setImageUrl(UUID id, String imageUrl) {
-        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+    public ItemDto setImageUrl(UUID ownerId, UUID id, String imageUrl) {
+        Item item = requireOwnedItem(ownerId, id);
         item.setImageUrl(imageUrl);
         return ItemDto.from(itemRepository.save(item));
     }
@@ -94,8 +94,8 @@ public class ItemService {
      * this is what makes bulk-uploaded photos matchable without manual tagging.
      */
     @Transactional
-    public ItemDto autoTagIfUntagged(UUID id, byte[] imageBytes, String contentType) {
-        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+    public ItemDto autoTagIfUntagged(UUID ownerId, UUID id, byte[] imageBytes, String contentType) {
+        Item item = requireOwnedItem(ownerId, id);
         if (!item.getColors().isEmpty() || !item.getVibes().isEmpty()) {
             return ItemDto.from(item);
         }
@@ -108,10 +108,16 @@ public class ItemService {
         return ItemDto.from(itemRepository.save(item));
     }
 
+    /** Not found or owned by someone else are treated identically, so ownership never leaks via 404 vs 403. */
+    Item requireOwnedItem(UUID ownerId, UUID id) {
+        return itemRepository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new ItemNotFoundException(id));
+    }
+
     /** Ids are always generated server-side; any id in the request is discarded. Tags are normalized to lowercase. */
-    private Item toEntity(CreateItemRequest request) {
+    private Item toEntity(UUID ownerId, CreateItemRequest request) {
         return Item.builder()
                 .id(UUID.randomUUID())
+                .ownerId(ownerId)
                 .name(request.name())
                 .category(request.category())
                 .imageUrl(request.imageUrl())

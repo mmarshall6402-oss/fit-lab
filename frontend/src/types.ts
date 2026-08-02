@@ -122,3 +122,13 @@ export interface SaveOutfitRequest {
   bottomId: string
   shoesId: string
 }
+
+export interface UserDto {
+  id: string
+  email: string
+}
+
+export interface AuthResponse {
+  token: string
+  user: UserDto
+}

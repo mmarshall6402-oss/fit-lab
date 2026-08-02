@@ -7,5 +7,5 @@ import java.util.List;
 import java.util.UUID;
 
 public interface StyleFeedbackRepository extends JpaRepository<StyleFeedback, UUID> {
-    List<StyleFeedback> findAllByOrderByCreatedAtDesc();
+    List<StyleFeedback> findAllByOwnerIdOrderByCreatedAtDesc(UUID ownerId);
 }

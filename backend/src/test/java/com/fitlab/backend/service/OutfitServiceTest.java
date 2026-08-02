@@ -29,6 +29,7 @@ class OutfitServiceTest {
     private ItemRepository itemRepository;
 
     private final OutfitScoringService scoringService = new OutfitScoringService(new TagMatcher());
+    private final UUID owner = UUID.randomUUID();
 
     private Item item(String name, Category category, Set<String> colors, Set<String> vibes) {
         return Item.builder().id(UUID.randomUUID()).name(name).category(category).colors(colors).vibes(vibes).build();
@@ -43,11 +44,11 @@ class OutfitServiceTest {
         Item weakShoes = item("weak shoes", Category.SHOES, Set.of("yellow"), Set.of());
 
         OutfitService outfitService = new OutfitService(itemRepository, scoringService);
-        when(itemRepository.findById(anchorShirt.getId())).thenReturn(Optional.of(anchorShirt));
-        when(itemRepository.findByCategory(Category.BOTTOM)).thenReturn(List.of(strongBottom, weakBottom));
-        when(itemRepository.findByCategory(Category.SHOES)).thenReturn(List.of(strongShoes, weakShoes));
+        when(itemRepository.findByIdAndOwnerId(anchorShirt.getId(), owner)).thenReturn(Optional.of(anchorShirt));
+        when(itemRepository.findByOwnerIdAndCategory(owner, Category.BOTTOM)).thenReturn(List.of(strongBottom, weakBottom));
+        when(itemRepository.findByOwnerIdAndCategory(owner, Category.SHOES)).thenReturn(List.of(strongShoes, weakShoes));
 
-        OutfitDto outfit = outfitService.buildBest(anchorShirt.getId());
+        OutfitDto outfit = outfitService.buildBest(owner, anchorShirt.getId());
 
         assertThat(outfit.shirt().id()).isEqualTo(anchorShirt.getId());
         assertThat(outfit.bottom().id()).isEqualTo(strongBottom.getId());
@@ -63,15 +64,15 @@ class OutfitServiceTest {
         Item firstShoe = item("first shoe", Category.SHOES, Set.of(), Set.of());
         Item secondShoe = item("second shoe", Category.SHOES, Set.of(), Set.of());
         // Neither shoe shares a tag with anything, so both combos genuinely tie at score 0.
-        when(itemRepository.findById(anchorShirt.getId())).thenReturn(Optional.of(anchorShirt));
-        when(itemRepository.findByCategory(Category.BOTTOM)).thenReturn(List.of(bottom));
-        when(itemRepository.findByCategory(Category.SHOES)).thenReturn(List.of(firstShoe, secondShoe));
+        when(itemRepository.findByIdAndOwnerId(anchorShirt.getId(), owner)).thenReturn(Optional.of(anchorShirt));
+        when(itemRepository.findByOwnerIdAndCategory(owner, Category.BOTTOM)).thenReturn(List.of(bottom));
+        when(itemRepository.findByOwnerIdAndCategory(owner, Category.SHOES)).thenReturn(List.of(firstShoe, secondShoe));
 
         OutfitService pickFirst = new OutfitService(itemRepository, scoringService, fixedRandom(0));
         OutfitService pickSecond = new OutfitService(itemRepository, scoringService, fixedRandom(1));
 
-        assertThat(pickFirst.buildBest(anchorShirt.getId()).shoes().id()).isEqualTo(firstShoe.getId());
-        assertThat(pickSecond.buildBest(anchorShirt.getId()).shoes().id()).isEqualTo(secondShoe.getId());
+        assertThat(pickFirst.buildBest(owner, anchorShirt.getId()).shoes().id()).isEqualTo(firstShoe.getId());
+        assertThat(pickSecond.buildBest(owner, anchorShirt.getId()).shoes().id()).isEqualTo(secondShoe.getId());
     }
 
     private Random fixedRandom(int index) {
@@ -87,9 +88,9 @@ class OutfitServiceTest {
     void throwsWhenAnchorDoesNotExist() {
         OutfitService outfitService = new OutfitService(itemRepository, scoringService);
         UUID missingId = UUID.randomUUID();
-        when(itemRepository.findById(missingId)).thenReturn(Optional.empty());
+        when(itemRepository.findByIdAndOwnerId(missingId, owner)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> outfitService.buildBest(missingId))
+        assertThatThrownBy(() -> outfitService.buildBest(owner, missingId))
                 .isInstanceOf(ItemNotFoundException.class);
     }
 
@@ -97,10 +98,10 @@ class OutfitServiceTest {
     void throwsWhenACategoryHasNoItemsToChooseFrom() {
         Item anchorShirt = item("anchor shirt", Category.SHIRT, Set.of("black"), Set.of("street"));
         OutfitService outfitService = new OutfitService(itemRepository, scoringService);
-        when(itemRepository.findById(anchorShirt.getId())).thenReturn(Optional.of(anchorShirt));
-        when(itemRepository.findByCategory(Category.BOTTOM)).thenReturn(List.of());
+        when(itemRepository.findByIdAndOwnerId(anchorShirt.getId(), owner)).thenReturn(Optional.of(anchorShirt));
+        when(itemRepository.findByOwnerIdAndCategory(owner, Category.BOTTOM)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> outfitService.buildBest(anchorShirt.getId()))
+        assertThatThrownBy(() -> outfitService.buildBest(owner, anchorShirt.getId()))
                 .isInstanceOf(InsufficientCatalogException.class);
     }
 
@@ -110,11 +111,11 @@ class OutfitServiceTest {
         Item bottom = item("bottom", Category.BOTTOM, Set.of("black", "red"), Set.of("street"));
         Item shoes = item("shoes", Category.SHOES, Set.of("black", "red"), Set.of("street"));
         OutfitService outfitService = new OutfitService(itemRepository, scoringService);
-        when(itemRepository.findById(shirt.getId())).thenReturn(Optional.of(shirt));
-        when(itemRepository.findById(bottom.getId())).thenReturn(Optional.of(bottom));
-        when(itemRepository.findById(shoes.getId())).thenReturn(Optional.of(shoes));
+        when(itemRepository.findByIdAndOwnerId(shirt.getId(), owner)).thenReturn(Optional.of(shirt));
+        when(itemRepository.findByIdAndOwnerId(bottom.getId(), owner)).thenReturn(Optional.of(bottom));
+        when(itemRepository.findByIdAndOwnerId(shoes.getId(), owner)).thenReturn(Optional.of(shoes));
 
-        OutfitDto result = outfitService.score(shirt.getId(), bottom.getId(), shoes.getId());
+        OutfitDto result = outfitService.score(owner, shirt.getId(), bottom.getId(), shoes.getId());
 
         assertThat(result.shirt().id()).isEqualTo(shirt.getId());
         assertThat(result.bottom().id()).isEqualTo(bottom.getId());
@@ -128,11 +129,11 @@ class OutfitServiceTest {
         Item anotherShirt = item("another shirt", Category.SHIRT, Set.of("black"), Set.of("street"));
         Item shoes = item("shoes", Category.SHOES, Set.of("black"), Set.of("street"));
         OutfitService outfitService = new OutfitService(itemRepository, scoringService);
-        when(itemRepository.findById(shirt.getId())).thenReturn(Optional.of(shirt));
-        when(itemRepository.findById(anotherShirt.getId())).thenReturn(Optional.of(anotherShirt));
+        when(itemRepository.findByIdAndOwnerId(shirt.getId(), owner)).thenReturn(Optional.of(shirt));
+        when(itemRepository.findByIdAndOwnerId(anotherShirt.getId(), owner)).thenReturn(Optional.of(anotherShirt));
 
         // passing a SHIRT id where a BOTTOM id is expected
-        assertThatThrownBy(() -> outfitService.score(shirt.getId(), anotherShirt.getId(), shoes.getId()))
+        assertThatThrownBy(() -> outfitService.score(owner, shirt.getId(), anotherShirt.getId(), shoes.getId()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

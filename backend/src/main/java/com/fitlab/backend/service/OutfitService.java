@@ -39,12 +39,12 @@ public class OutfitService {
 
     /** Falls back to neutral profile affinity for callers outside the Spring context (e.g. plain unit tests). */
     public OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService) {
-        this(itemRepository, scoringService, items -> Map.of(), new Random());
+        this(itemRepository, scoringService, (items, ownerId) -> Map.of(), new Random());
     }
 
     /** Package-private: lets tests inject a Random with a fixed nextInt() to make tie-breaking deterministic. */
     OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService, Random random) {
-        this(itemRepository, scoringService, items -> Map.of(), random);
+        this(itemRepository, scoringService, (items, ownerId) -> Map.of(), random);
     }
 
     OutfitService(ItemRepository itemRepository, OutfitScoringService scoringService, ProfileAffinityResolver profileAffinityResolver, Random random) {
@@ -54,12 +54,12 @@ public class OutfitService {
         this.random = random;
     }
 
-    public OutfitDto buildBest(UUID anchorId) {
-        Item anchor = itemRepository.findById(anchorId).orElseThrow(() -> new ItemNotFoundException(anchorId));
+    public OutfitDto buildBest(UUID ownerId, UUID anchorId) {
+        Item anchor = itemRepository.findByIdAndOwnerId(anchorId, ownerId).orElseThrow(() -> new ItemNotFoundException(anchorId));
 
-        List<Item> shirts = candidatesFor(Category.SHIRT, anchor);
-        List<Item> bottoms = candidatesFor(Category.BOTTOM, anchor);
-        List<Item> shoes = candidatesFor(Category.SHOES, anchor);
+        List<Item> shirts = candidatesFor(ownerId, Category.SHIRT, anchor);
+        List<Item> bottoms = candidatesFor(ownerId, Category.BOTTOM, anchor);
+        List<Item> shoes = candidatesFor(ownerId, Category.SHOES, anchor);
 
         // Resolve profile affinity ONCE for every distinct item this request will touch, not per
         // combination - the triple loop below can evaluate hundreds/thousands of combos, and each
@@ -68,7 +68,7 @@ public class OutfitService {
         touched.addAll(shirts);
         touched.addAll(bottoms);
         touched.addAll(shoes);
-        Map<UUID, Double> affinity = profileAffinityResolver.resolve(touched);
+        Map<UUID, Double> affinity = profileAffinityResolver.resolve(touched, ownerId);
 
         // Collect every combo tied for the best score instead of keeping only the
         // first one hit in catalog order - a strict ">" comparison here always
@@ -109,32 +109,32 @@ public class OutfitService {
     }
 
     /** Scores a specific user-picked triple (manual mix-and-match), rather than searching the catalog. */
-    public OutfitDto score(UUID shirtId, UUID bottomId, UUID shoesId) {
-        Item shirt = getByCategory(shirtId, Category.SHIRT);
-        Item bottom = getByCategory(bottomId, Category.BOTTOM);
-        Item shoes = getByCategory(shoesId, Category.SHOES);
+    public OutfitDto score(UUID ownerId, UUID shirtId, UUID bottomId, UUID shoesId) {
+        Item shirt = getByCategory(ownerId, shirtId, Category.SHIRT);
+        Item bottom = getByCategory(ownerId, bottomId, Category.BOTTOM);
+        Item shoes = getByCategory(ownerId, shoesId, Category.SHOES);
 
         return new OutfitDto(
                 ItemDto.from(shirt),
                 ItemDto.from(bottom),
                 ItemDto.from(shoes),
-                scoringService.holisticScore(shirt, bottom, shoes),
+                scoringService.holisticScore(ownerId, shirt, bottom, shoes),
                 scoringService.reasons(shirt, bottom, shoes)
         );
     }
 
-    private Item getByCategory(UUID id, Category expected) {
-        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+    private Item getByCategory(UUID ownerId, UUID id, Category expected) {
+        Item item = itemRepository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new ItemNotFoundException(id));
         if (item.getCategory() != expected) {
             throw new IllegalArgumentException(expected + " id does not refer to a " + expected + " item: " + id);
         }
         return item;
     }
 
-    private List<Item> candidatesFor(Category category, Item anchor) {
+    private List<Item> candidatesFor(UUID ownerId, Category category, Item anchor) {
         List<Item> candidates = anchor.getCategory() == category
                 ? List.of(anchor)
-                : itemRepository.findByCategory(category);
+                : itemRepository.findByOwnerIdAndCategory(ownerId, category);
         if (candidates.isEmpty()) {
             throw new InsufficientCatalogException("No items available in category " + category + " to build an outfit");
         }

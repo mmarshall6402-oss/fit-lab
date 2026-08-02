@@ -2,6 +2,7 @@ package com.fitlab.backend.controller;
 
 import com.fitlab.backend.dto.SaveOutfitRequest;
 import com.fitlab.backend.dto.SavedOutfitDto;
+import com.fitlab.backend.security.CurrentUser;
 import com.fitlab.backend.service.SavedOutfitService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,17 +29,17 @@ public class SavedOutfitController {
     @PostMapping("/outfit/saved")
     @ResponseStatus(HttpStatus.CREATED)
     public SavedOutfitDto save(@Valid @RequestBody SaveOutfitRequest request) {
-        return savedOutfitService.save(request.shirtId(), request.bottomId(), request.shoesId());
+        return savedOutfitService.save(CurrentUser.id(), request.shirtId(), request.bottomId(), request.shoesId());
     }
 
     @GetMapping("/outfit/saved")
     public List<SavedOutfitDto> getAll() {
-        return savedOutfitService.getAll();
+        return savedOutfitService.getAll(CurrentUser.id());
     }
 
     @DeleteMapping("/outfit/saved/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
-        savedOutfitService.delete(id);
+        savedOutfitService.delete(CurrentUser.id(), id);
     }
 }

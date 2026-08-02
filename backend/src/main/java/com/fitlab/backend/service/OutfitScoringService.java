@@ -35,7 +35,7 @@ public class OutfitScoringService {
 
     /** Falls back to hardcoded defaults and neutral profile affinity for callers outside the Spring context (e.g. plain unit tests). */
     public OutfitScoringService(Matcher matcher) {
-        this(matcher, ScoringConfig::defaults, items -> Map.of());
+        this(matcher, ScoringConfig::defaults, (items, ownerId) -> Map.of());
     }
 
     @Autowired
@@ -53,8 +53,8 @@ public class OutfitScoringService {
      * affinity once via ProfileAffinityResolver and call the 4-arg overload
      * instead, to avoid repeated cache lookups/AI calls inside a hot loop.
      */
-    public double holisticScore(Item shirt, Item bottom, Item shoes) {
-        Map<UUID, Double> affinity = profileAffinityResolver.resolve(List.of(shirt, bottom, shoes));
+    public double holisticScore(UUID ownerId, Item shirt, Item bottom, Item shoes) {
+        Map<UUID, Double> affinity = profileAffinityResolver.resolve(List.of(shirt, bottom, shoes), ownerId);
         return holisticScore(shirt, bottom, shoes, affinity);
     }
 

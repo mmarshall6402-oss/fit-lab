@@ -25,16 +25,16 @@ public class RecommendationService {
     }
 
     @Transactional(readOnly = true)
-    public List<RecommendationDto> recommend(UUID anchorId, Category category) {
-        Item anchor = itemRepository.findById(anchorId).orElseThrow(() -> new ItemNotFoundException(anchorId));
-        return matchService.rank(anchor, itemRepository.findByCategory(category));
+    public List<RecommendationDto> recommend(UUID ownerId, UUID anchorId, Category category) {
+        Item anchor = itemRepository.findByIdAndOwnerId(anchorId, ownerId).orElseThrow(() -> new ItemNotFoundException(anchorId));
+        return matchService.rank(ownerId, anchor, itemRepository.findByOwnerIdAndCategory(ownerId, category));
     }
 
     @Transactional(readOnly = true)
-    public FullRecommendationDto recommendFull(UUID shirtId) {
-        Item shirt = itemRepository.findById(shirtId).orElseThrow(() -> new ItemNotFoundException(shirtId));
-        List<RecommendationDto> bottoms = matchService.rank(shirt, itemRepository.findByCategory(Category.BOTTOM));
-        List<RecommendationDto> shoes = matchService.rank(shirt, itemRepository.findByCategory(Category.SHOES));
+    public FullRecommendationDto recommendFull(UUID ownerId, UUID shirtId) {
+        Item shirt = itemRepository.findByIdAndOwnerId(shirtId, ownerId).orElseThrow(() -> new ItemNotFoundException(shirtId));
+        List<RecommendationDto> bottoms = matchService.rank(ownerId, shirt, itemRepository.findByOwnerIdAndCategory(ownerId, Category.BOTTOM));
+        List<RecommendationDto> shoes = matchService.rank(ownerId, shirt, itemRepository.findByOwnerIdAndCategory(ownerId, Category.SHOES));
         return new FullRecommendationDto(ItemDto.from(shirt), bottoms, shoes);
     }
 }

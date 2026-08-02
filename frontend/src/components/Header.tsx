@@ -1,4 +1,8 @@
+import { useAuth } from '../auth'
+
 export function Header() {
+  const { user, logout } = useAuth()
+
   return (
     <header className="border-b border-white/10 px-4 py-5 sm:px-8">
       <div className="mx-auto flex max-w-6xl items-center justify-between">
@@ -27,6 +31,17 @@ export function Header() {
           >
             Admin
           </a>
+          {user && (
+            <>
+              <span className="hidden font-mono text-xs text-neutral-600 md:block">{user.email}</span>
+              <button
+                onClick={logout}
+                className="font-mono text-xs uppercase tracking-widest text-neutral-600 hover:text-accent cursor-pointer"
+              >
+                Log out
+              </button>
+            </>
+          )}
         </div>
       </div>
     </header>

@@ -27,7 +27,7 @@ class MatchServiceTest {
         Item weakMatch = item("weak bottom", Category.BOTTOM, Set.of("black"), Set.of());
         Item noMatch = item("no match bottom", Category.BOTTOM, Set.of("white"), Set.of("clean"));
 
-        List<RecommendationDto> ranked = matchService.rank(anchor, List.of(weakMatch, noMatch, strongMatch));
+        List<RecommendationDto> ranked = matchService.rank(UUID.randomUUID(), anchor, List.of(weakMatch, noMatch, strongMatch));
 
         assertThat(ranked).extracting(r -> r.item().name())
                 .containsExactly("strong bottom", "weak bottom", "no match bottom");
@@ -39,7 +39,7 @@ class MatchServiceTest {
     void excludesTheAnchorItselfFromResults() {
         Item anchor = item("anchor", Category.SHIRT, Set.of("black"), Set.of());
 
-        List<RecommendationDto> ranked = matchService.rank(anchor, List.of(anchor));
+        List<RecommendationDto> ranked = matchService.rank(UUID.randomUUID(), anchor, List.of(anchor));
 
         assertThat(ranked).isEmpty();
     }

@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OutfitScoringServiceTest {
 
     private final OutfitScoringService scoringService = new OutfitScoringService(new TagMatcher());
+    private final UUID owner = UUID.randomUUID();
 
     private Item item(String name, Category category, Set<String> colors, Set<String> vibes) {
         return Item.builder().id(UUID.randomUUID()).name(name).category(category).colors(colors).vibes(vibes).build();
@@ -25,7 +26,7 @@ class OutfitScoringServiceTest {
         Item bottom = item("bottom", Category.BOTTOM, Set.of("black", "red"), Set.of("street"));
         Item shoes = item("shoes", Category.SHOES, Set.of("black", "red"), Set.of("street"));
 
-        assertThat(scoringService.holisticScore(shirt, bottom, shoes)).isEqualTo(100.0);
+        assertThat(scoringService.holisticScore(owner, shirt, bottom, shoes)).isEqualTo(100.0);
     }
 
     @Test
@@ -34,7 +35,7 @@ class OutfitScoringServiceTest {
         Item bottom = item("bottom", Category.BOTTOM, Set.of("white"), Set.of("clean"));
         Item shoes = item("shoes", Category.SHOES, Set.of("green"), Set.of("quiet"));
 
-        assertThat(scoringService.holisticScore(shirt, bottom, shoes)).isZero();
+        assertThat(scoringService.holisticScore(owner, shirt, bottom, shoes)).isZero();
     }
 
     @Test
@@ -43,7 +44,7 @@ class OutfitScoringServiceTest {
         Item bottom = item("bottom", Category.BOTTOM, Set.of("black"), Set.of());
         Item shoes = item("shoes", Category.SHOES, Set.of(), Set.of("street"));
 
-        double score = scoringService.holisticScore(shirt, bottom, shoes);
+        double score = scoringService.holisticScore(owner, shirt, bottom, shoes);
 
         assertThat(score).isBetween(0.0, 100.0);
     }
@@ -55,8 +56,8 @@ class OutfitScoringServiceTest {
         Item weakBottom = item("weakBottom", Category.BOTTOM, Set.of("green"), Set.of());
         Item shoes = item("shoes", Category.SHOES, Set.of("black"), Set.of("street"));
 
-        double strongScore = scoringService.holisticScore(shirt, strongBottom, shoes);
-        double weakScore = scoringService.holisticScore(shirt, weakBottom, shoes);
+        double strongScore = scoringService.holisticScore(owner, shirt, strongBottom, shoes);
+        double weakScore = scoringService.holisticScore(owner, shirt, weakBottom, shoes);
 
         assertThat(strongScore).isGreaterThan(weakScore);
     }

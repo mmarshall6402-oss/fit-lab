@@ -69,7 +69,7 @@ public class ProfileAffinityService implements ProfileAffinityResolver {
 
     @Override
     @Transactional
-    public Map<UUID, Double> resolve(Collection<Item> items) {
+    public Map<UUID, Double> resolve(Collection<Item> items, UUID ownerId) {
         Map<UUID, Item> distinct = new LinkedHashMap<>();
         for (Item item : items) {
             distinct.put(item.getId(), item);
@@ -78,7 +78,7 @@ public class ProfileAffinityService implements ProfileAffinityResolver {
             return Map.of();
         }
 
-        Optional<StyleProfileEntity> profileOpt = profileRepository.findById(StyleProfileEntity.SINGLETON_ID);
+        Optional<StyleProfileEntity> profileOpt = profileRepository.findById(ownerId);
         if (!isEnabled() || profileOpt.isEmpty() || profileOpt.get().getFeedbackCount() == 0) {
             return neutralMap(distinct.keySet());
         }
