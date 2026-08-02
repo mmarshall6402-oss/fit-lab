@@ -35,6 +35,9 @@ public class SavedOutfit {
     private UUID id;
 
     @Column(nullable = false)
+    private UUID ownerId;
+
+    @Column(nullable = false)
     private UUID shirtId;
 
     @Column(nullable = false)

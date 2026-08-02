@@ -32,7 +32,7 @@ public class MatchService {
 
     /** Falls back to hardcoded defaults and neutral profile affinity for callers outside the Spring context (e.g. plain unit tests). */
     public MatchService(Matcher matcher) {
-        this(matcher, ScoringConfig::defaults, items -> Map.of());
+        this(matcher, ScoringConfig::defaults, (items, ownerId) -> Map.of());
     }
 
     @Autowired
@@ -42,8 +42,8 @@ public class MatchService {
         this.profileAffinityResolver = profileAffinityResolver;
     }
 
-    public List<RecommendationDto> rank(Item anchor, List<Item> candidates) {
-        Map<UUID, Double> affinity = profileAffinityResolver.resolve(candidates);
+    public List<RecommendationDto> rank(UUID ownerId, Item anchor, List<Item> candidates) {
+        Map<UUID, Double> affinity = profileAffinityResolver.resolve(candidates, ownerId);
         double profileWeight = configProvider.current().profileWeight();
 
         return candidates.stream()

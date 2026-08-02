@@ -24,6 +24,10 @@ fitlab:
   admin:
     # Shared secret gating /admin/**. Always override this in production.
     token: ${ADMIN_TOKEN:changeme-admin-token}
+  jwt:
+    # Signs every account auth token. Always override this in production.
+    secret: ${JWT_SECRET:changeme-dev-only-jwt-secret-please-override-in-production-0123456789}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:43200}
   ai:
     # Model used to auto-tag uploaded photos with colors/vibes. Only runs when
     # ANTHROPIC_API_KEY is set - otherwise auto-tagging is silently skipped.

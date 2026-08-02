@@ -35,6 +35,9 @@ public class Item {
     private UUID id;
 
     @Column(nullable = false)
+    private UUID ownerId;
+
+    @Column(nullable = false)
     private String name;
 
     @Enumerated(EnumType.STRING)

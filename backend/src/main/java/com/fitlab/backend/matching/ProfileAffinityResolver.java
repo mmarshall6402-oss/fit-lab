@@ -14,5 +14,5 @@ import java.util.UUID;
  */
 public interface ProfileAffinityResolver {
     /** -1.0 (resembles disliked traits) to +1.0 (matches liked traits) per item id; missing entries mean neutral. */
-    Map<UUID, Double> resolve(Collection<Item> items);
+    Map<UUID, Double> resolve(Collection<Item> items, UUID ownerId);
 }

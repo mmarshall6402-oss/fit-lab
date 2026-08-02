@@ -3,6 +3,7 @@ package com.fitlab.backend.controller;
 import com.fitlab.backend.domain.Category;
 import com.fitlab.backend.dto.CreateItemRequest;
 import com.fitlab.backend.dto.ItemDto;
+import com.fitlab.backend.security.CurrentUser;
 import com.fitlab.backend.service.ImageStorageService;
 import com.fitlab.backend.service.ItemService;
 import jakarta.validation.Valid;
@@ -37,38 +38,39 @@ public class ItemController {
 
     @GetMapping
     public List<ItemDto> findAll(@RequestParam(required = false) Category category) {
-        return itemService.findAll(category);
+        return itemService.findAll(CurrentUser.id(), category);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ItemDto create(@Valid @RequestBody CreateItemRequest request) {
-        return itemService.create(request);
+        return itemService.create(CurrentUser.id(), request);
     }
 
     @PostMapping("/import")
     @ResponseStatus(HttpStatus.CREATED)
     public List<ItemDto> importAll(@Valid @RequestBody List<@Valid CreateItemRequest> requests) {
-        return itemService.importAll(requests);
+        return itemService.importAll(CurrentUser.id(), requests);
     }
 
     @PutMapping("/{id}")
     public ItemDto update(@PathVariable UUID id, @Valid @RequestBody CreateItemRequest request) {
-        return itemService.update(id, request);
+        return itemService.update(CurrentUser.id(), id, request);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
-        itemService.delete(id);
+        itemService.delete(CurrentUser.id(), id);
     }
 
     @PostMapping("/{id}/image")
     public ItemDto uploadImage(@PathVariable UUID id, @RequestParam MultipartFile file) throws IOException {
+        UUID ownerId = CurrentUser.id();
         byte[] imageBytes = file.getBytes();
         String contentType = file.getContentType();
         String imageUrl = imageStorageService.store(id, file);
-        itemService.setImageUrl(id, imageUrl);
-        return itemService.autoTagIfUntagged(id, imageBytes, contentType);
+        itemService.setImageUrl(ownerId, id, imageUrl);
+        return itemService.autoTagIfUntagged(ownerId, id, imageBytes, contentType);
     }
 }

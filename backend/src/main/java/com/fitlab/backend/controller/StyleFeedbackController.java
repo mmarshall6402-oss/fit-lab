@@ -4,6 +4,7 @@ import com.fitlab.backend.dto.StyleFeedbackDto;
 import com.fitlab.backend.dto.StyleProfileDto;
 import com.fitlab.backend.dto.SubmitItemFeedbackRequest;
 import com.fitlab.backend.dto.SubmitOutfitFeedbackRequest;
+import com.fitlab.backend.security.CurrentUser;
 import com.fitlab.backend.service.StyleFeedbackService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -29,24 +30,24 @@ public class StyleFeedbackController {
     @PostMapping("/items/{id}/feedback")
     @ResponseStatus(HttpStatus.CREATED)
     public StyleFeedbackDto submitItemFeedback(@PathVariable UUID id, @Valid @RequestBody SubmitItemFeedbackRequest request) {
-        return styleFeedbackService.submitForItem(id, request.rawText(), request.inputMethod(), request.sentiment());
+        return styleFeedbackService.submitForItem(CurrentUser.id(), id, request.rawText(), request.inputMethod(), request.sentiment());
     }
 
     @PostMapping("/outfit/feedback")
     @ResponseStatus(HttpStatus.CREATED)
     public StyleFeedbackDto submitOutfitFeedback(@Valid @RequestBody SubmitOutfitFeedbackRequest request) {
         return styleFeedbackService.submitForOutfit(
-                request.shirtId(), request.bottomId(), request.shoesId(),
+                CurrentUser.id(), request.shirtId(), request.bottomId(), request.shoesId(),
                 request.rawText(), request.inputMethod(), request.sentiment());
     }
 
     @GetMapping("/style-profile")
     public StyleProfileDto getProfile() {
-        return styleFeedbackService.getProfile();
+        return styleFeedbackService.getProfile(CurrentUser.id());
     }
 
     @GetMapping("/style-profile/history")
     public List<StyleFeedbackDto> getHistory() {
-        return styleFeedbackService.getHistory();
+        return styleFeedbackService.getHistory(CurrentUser.id());
     }
 }

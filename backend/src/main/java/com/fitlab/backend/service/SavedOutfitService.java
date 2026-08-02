@@ -39,17 +39,18 @@ public class SavedOutfitService {
     }
 
     @Transactional
-    public SavedOutfitDto save(UUID shirtId, UUID bottomId, UUID shoesId) {
-        Item shirt = getByCategory(shirtId, Category.SHIRT);
-        Item bottom = getByCategory(bottomId, Category.BOTTOM);
-        Item shoes = getByCategory(shoesId, Category.SHOES);
+    public SavedOutfitDto save(UUID ownerId, UUID shirtId, UUID bottomId, UUID shoesId) {
+        Item shirt = getByCategory(ownerId, shirtId, Category.SHIRT);
+        Item bottom = getByCategory(ownerId, bottomId, Category.BOTTOM);
+        Item shoes = getByCategory(ownerId, shoesId, Category.SHOES);
 
         // Score is recomputed server-side, never trusted from the client, and
         // snapshotted here rather than recomputed on read - see class javadoc.
-        double score = scoringService.holisticScore(shirt, bottom, shoes);
+        double score = scoringService.holisticScore(ownerId, shirt, bottom, shoes);
 
         SavedOutfit saved = savedOutfitRepository.save(SavedOutfit.builder()
                 .id(UUID.randomUUID())
+                .ownerId(ownerId)
                 .shirtId(shirtId)
                 .bottomId(bottomId)
                 .shoesId(shoesId)
@@ -61,20 +62,20 @@ public class SavedOutfitService {
     }
 
     @Transactional(readOnly = true)
-    public List<SavedOutfitDto> getAll() {
-        return savedOutfitRepository.findAllByOrderByCreatedAtDesc().stream().map(SavedOutfitDto::from).toList();
+    public List<SavedOutfitDto> getAll(UUID ownerId) {
+        return savedOutfitRepository.findAllByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+                .map(SavedOutfitDto::from).toList();
     }
 
     @Transactional
-    public void delete(UUID id) {
-        if (!savedOutfitRepository.existsById(id)) {
-            throw new SavedOutfitNotFoundException(id);
-        }
-        savedOutfitRepository.deleteById(id);
+    public void delete(UUID ownerId, UUID id) {
+        SavedOutfit outfit = savedOutfitRepository.findByIdAndOwnerId(id, ownerId)
+                .orElseThrow(() -> new SavedOutfitNotFoundException(id));
+        savedOutfitRepository.delete(outfit);
     }
 
-    private Item getByCategory(UUID id, Category expected) {
-        Item item = itemRepository.findById(id).orElseThrow(() -> new ItemNotFoundException(id));
+    private Item getByCategory(UUID ownerId, UUID id, Category expected) {
+        Item item = itemRepository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new ItemNotFoundException(id));
         if (item.getCategory() != expected) {
             throw new IllegalArgumentException(expected + " id does not refer to a " + expected + " item: " + id);
         }

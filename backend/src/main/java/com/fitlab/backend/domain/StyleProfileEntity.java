@@ -17,12 +17,12 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 /**
- * Singleton row (fixed id) holding the user's evolving style profile, built up
+ * One row per account, holding that user's evolving style profile, built up
  * by merging structured preferences extracted from each piece of style
- * feedback. There is exactly one row ever, following the same pattern as
- * ScoringConfigEntity. Feeds into scoring via ProfileAffinityService, which
+ * feedback they've given. Feeds into scoring via ProfileAffinityService, which
  * judges how well a given item aligns with likes/dislikes/styleTags here.
  */
 @Entity
@@ -34,10 +34,8 @@ import java.util.Set;
 @Builder
 public class StyleProfileEntity {
 
-    public static final long SINGLETON_ID = 1L;
-
     @Id
-    private Long id;
+    private UUID ownerId;
 
     @Builder.Default
     @ElementCollection(fetch = FetchType.EAGER)

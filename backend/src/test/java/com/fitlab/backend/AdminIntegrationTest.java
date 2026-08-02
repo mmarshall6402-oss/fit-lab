@@ -1,11 +1,14 @@
 package com.fitlab.backend;
 
 import com.fitlab.backend.domain.Category;
+import com.fitlab.backend.dto.AuthResponse;
 import com.fitlab.backend.dto.CreateItemRequest;
 import com.fitlab.backend.dto.ItemDto;
 import com.fitlab.backend.dto.OutfitDto;
+import com.fitlab.backend.dto.RegisterRequest;
 import com.fitlab.backend.dto.ScoringConfigDto;
 import com.fitlab.backend.dto.UpdateScoringConfigRequest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,6 +20,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,6 +35,16 @@ class AdminIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    private HttpHeaders authHeaders;
+
+    @BeforeEach
+    void registerUser() {
+        RegisterRequest request = new RegisterRequest("fitlab-admin-test-" + UUID.randomUUID() + "@example.com", "password123");
+        AuthResponse auth = restTemplate.postForEntity(url("/auth/register"), request, AuthResponse.class).getBody();
+        authHeaders = new HttpHeaders();
+        authHeaders.setBearerAuth(auth.token());
+    }
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }
@@ -41,6 +55,10 @@ class AdminIntegrationTest {
             headers.set("X-Admin-Token", token);
         }
         return new HttpEntity<>(body, headers);
+    }
+
+    private <T> ResponseEntity<T> getAuthed(String path, Class<T> responseType) {
+        return restTemplate.exchange(url(path), HttpMethod.GET, new HttpEntity<>(authHeaders), responseType);
     }
 
     @Test
@@ -61,8 +79,8 @@ class AdminIntegrationTest {
         ItemDto shoes = createItem("Admin Test Shoes", Category.SHOES, Set.of("white"), Set.of());
 
         // Only shirt/bottom share a color; with default weights this should be a partial (non-zero, non-perfect) score.
-        OutfitDto before = restTemplate.getForEntity(
-                url("/outfit/score?shirtId=" + shirt.id() + "&bottomId=" + bottom.id() + "&shoesId=" + shoes.id()),
+        OutfitDto before = getAuthed(
+                "/outfit/score?shirtId=" + shirt.id() + "&bottomId=" + bottom.id() + "&shoesId=" + shoes.id(),
                 OutfitDto.class).getBody();
         assertThat(before.score()).isBetween(0.0, 100.0);
 
@@ -81,8 +99,8 @@ class AdminIntegrationTest {
                 true, true, true, 2.0);
         restTemplate.exchange(url("/admin/scoring-config"), HttpMethod.PUT, withToken(zeroedColor, ADMIN_TOKEN), ScoringConfigDto.class);
 
-        OutfitDto after = restTemplate.getForEntity(
-                url("/outfit/score?shirtId=" + shirt.id() + "&bottomId=" + bottom.id() + "&shoesId=" + shoes.id()),
+        OutfitDto after = getAuthed(
+                "/outfit/score?shirtId=" + shirt.id() + "&bottomId=" + bottom.id() + "&shoesId=" + shoes.id(),
                 OutfitDto.class).getBody();
         assertThat(after.score()).isZero();
 
@@ -102,12 +120,12 @@ class AdminIntegrationTest {
                 url("/admin/items"), HttpMethod.DELETE, withToken(null, ADMIN_TOKEN), Void.class);
         assertThat(wiped.getStatusCode().value()).isEqualTo(204);
 
-        ResponseEntity<ItemDto[]> remaining = restTemplate.getForEntity(url("/items"), ItemDto[].class);
+        ResponseEntity<ItemDto[]> remaining = getAuthed("/items", ItemDto[].class);
         assertThat(remaining.getBody()).isEmpty();
     }
 
     private ItemDto createItem(String name, Category category, Set<String> colors, Set<String> vibes) {
         CreateItemRequest request = new CreateItemRequest(name, category, null, colors, vibes);
-        return restTemplate.postForEntity(url("/items"), request, ItemDto.class).getBody();
+        return restTemplate.exchange(url("/items"), HttpMethod.POST, new HttpEntity<>(request, authHeaders), ItemDto.class).getBody();
     }
 }

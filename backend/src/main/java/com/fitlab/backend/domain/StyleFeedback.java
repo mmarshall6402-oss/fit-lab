@@ -40,6 +40,9 @@ public class StyleFeedback {
     @Id
     private UUID id;
 
+    @Column(nullable = false)
+    private UUID ownerId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private FeedbackTarget target;

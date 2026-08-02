@@ -1,6 +1,7 @@
 package com.fitlab.backend.controller;
 
 import com.fitlab.backend.dto.OutfitDto;
+import com.fitlab.backend.security.CurrentUser;
 import com.fitlab.backend.service.OutfitService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,11 +20,11 @@ public class OutfitController {
 
     @GetMapping("/outfit/build")
     public OutfitDto build(@RequestParam UUID anchorId) {
-        return outfitService.buildBest(anchorId);
+        return outfitService.buildBest(CurrentUser.id(), anchorId);
     }
 
     @GetMapping("/outfit/score")
     public OutfitDto score(@RequestParam UUID shirtId, @RequestParam UUID bottomId, @RequestParam UUID shoesId) {
-        return outfitService.score(shirtId, bottomId, shoesId);
+        return outfitService.score(CurrentUser.id(), shirtId, bottomId, shoesId);
     }
 }
