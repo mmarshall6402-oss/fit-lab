@@ -1,13 +1,14 @@
 # Copy to terraform.tfvars (gitignored) and fill in real values.
 # Never commit terraform.tfvars - it holds secrets.
 
-admin_token       = "changeme-admin-token"
-jwt_secret        = "changeme-dev-only-jwt-secret-please-override-in-production-0123456789"
-anthropic_api_key = ""
+# Generate with: openssl rand -hex 32
+# Must ALSO be set as ORIGIN_VERIFY_SECRET on the Elastic Beanstalk
+# environment (outside Terraform - see cloudfront.tf's comment on why EB
+# itself isn't managed here) so the backend actually enforces it.
+cloudfront_origin_verify_secret = "changeme-generate-a-real-random-secret"
 
-# Leave db_url/db_username/db_password unset to keep using the backend's
-# default local-file H2 database. Only set these once a real database
-# (e.g. RDS Postgres) is provisioned.
-# db_url      = "jdbc:postgresql://<rds-endpoint>:5432/fitlab"
-# db_username = "fitlab"
-# db_password = "..."
+alarm_email = "mmarshall1011@icloud.com"
+
+# Optional - enables the CPU alarm. Find via:
+#   aws elasticbeanstalk describe-environment-resources --environment-name Fitlab-backend-env
+# eb_autoscaling_group_name = "awseb-e-xxxxxxxxxx-stack-AWSEBAutoScalingGroup-xxxxxxxxxxxxx"

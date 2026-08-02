@@ -9,10 +9,9 @@ output "cloudfront_distribution_id" {
 }
 
 output "frontend_bucket_name" {
-  value = aws_s3_bucket.frontend.bucket
+  value = data.aws_s3_bucket.frontend.bucket
 }
 
-output "eb_environment_cname" {
-  description = "The backend's own domain - config.js should NOT need this anymore once CloudFront's path-based routing is live; kept only for reference."
-  value       = aws_elastic_beanstalk_environment.backend.cname
+output "sns_alerts_topic_arn" {
+  value = aws_sns_topic.alerts.arn
 }

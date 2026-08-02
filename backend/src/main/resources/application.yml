@@ -28,6 +28,12 @@ fitlab:
     # Signs every account auth token. Always override this in production.
     secret: ${JWT_SECRET:changeme-dev-only-jwt-secret-please-override-in-production-0123456789}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:43200}
+  origin-verify:
+    # Optional. When set, every request must carry this value in the X-Origin-Verify header -
+    # CloudFront sends it automatically once configured (see infra/cloudfront.tf). Left unset
+    # (the default), this check is skipped entirely: local dev, tests, and any deploy not yet
+    # sitting behind that CloudFront origin.
+    secret: ${ORIGIN_VERIFY_SECRET:}
   ai:
     # Model used to auto-tag uploaded photos with colors/vibes. Only runs when
     # ANTHROPIC_API_KEY is set - otherwise auto-tagging is silently skipped.

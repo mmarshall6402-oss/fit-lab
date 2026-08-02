@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.10.0" # backend native S3 locking (use_lockfile) needs 1.10+
 
   required_providers {
     aws = {
@@ -8,17 +8,18 @@ terraform {
     }
   }
 
-  # State is not remote yet. Before anyone but one person runs this, move to a
-  # backend that supports locking (S3 + DynamoDB, or Terraform Cloud) - two
-  # people applying against local state at the same time will corrupt it.
-  #
-  # backend "s3" {
-  #   bucket         = "fitlab-terraform-state-058914805301"
-  #   key            = "fitlab/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "fitlab-terraform-locks"
-  #   encrypt        = true
-  # }
+  # Bucket created once, by hand, via infra/bootstrap (see that directory's
+  # README/comments) - it can't live in this same state, since this backend
+  # block has to point at it before it exists. use_lockfile uses the S3
+  # backend's own native locking (conditional writes to a .tflock object), so
+  # no separate DynamoDB lock table is needed.
+  backend "s3" {
+    bucket       = "fitlab-terraform-state-058914805301"
+    key          = "fitlab/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {

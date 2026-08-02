@@ -27,7 +27,7 @@ resource "aws_cloudfront_distribution" "app" {
   price_class         = var.cloudfront_price_class
 
   origin {
-    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
+    domain_name              = data.aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
@@ -47,6 +47,19 @@ resource "aws_cloudfront_distribution" "app" {
       origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
+
+    # CloudFront routing does NOT make the EB origin private - its
+    # http://...elasticbeanstalk.com URL is still directly, publicly
+    # reachable, bypassing CloudFront (and the mixed-content fix) entirely.
+    # This header is CloudFront's half of an origin-verify pattern: it's sent
+    # on every request CloudFront forwards, and the backend (see
+    # OriginVerifyFilter) rejects any request missing it - so hitting EB
+    # directly, with no CloudFront in front, gets a 403 instead of a live
+    # response.
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = var.cloudfront_origin_verify_secret
+    }
   }
 
   default_cache_behavior {
@@ -58,6 +71,13 @@ resource "aws_cloudfront_distribution" "app" {
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
   }
 
+  # One behavior per top-level route group rather than a single "/api/*"
+  # catch-all: the backend's controllers were never namespaced under /api
+  # (routes are /items, /outfit/*, /auth/*, etc. directly - see
+  # backend/README.md), so a single /api/* pattern wouldn't match anything
+  # without also renaming every controller mapping and the frontend's API
+  # client. Adding an /api prefix backend-wide would be a reasonable future
+  # cleanup, just a separate change from this one.
   dynamic "ordered_cache_behavior" {
     for_each = var.backend_path_patterns
     content {
