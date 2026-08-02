@@ -1,0 +1,78 @@
+name: Terraform Apply
+
+# Manual-only, and gated twice over: the `environment: aws-infra` line below
+# means this job WAITS for approval from whoever is set as a required
+# reviewer on that environment (configure this in repo Settings >
+# Environments > New environment "aws-infra" > Required reviewers - it can't
+# be set from this file). On top of that, the typed confirmation phrase below
+# is a second, independent check. Neither replaces reading the plan output
+# yourself - do that via the Terraform Plan PR comment (or a local
+# `terraform plan`) before ever running this.
+#
+# Requires infra/bootstrap's state bucket to already exist (see infra/README.md).
+#
+# Secrets used (repo Settings > Secrets and variables > Actions):
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY - same ones deploy.yml/
+#     deploy-frontend.yml already use.
+#   CLOUDFRONT_ORIGIN_VERIFY_SECRET - required, no default in variables.tf.
+#   ALARM_EMAIL - optional, only needed to override the default in variables.tf.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "apply-infra" to confirm you have reviewed a plan and want to apply it'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: aws-infra
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Verify confirmation phrase
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "apply-infra" ]; then
+            echo "Confirmation phrase did not match 'apply-infra' - aborting." >&2
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      # Plans fresh right before applying (rather than reusing a plan artifact
+      # from the PR workflow) so what gets applied always matches the
+      # current state, not a possibly-stale plan from an earlier commit.
+      - name: Terraform plan
+        run: terraform plan -no-color -input=false -out=tfplan
+        env:
+          TF_VAR_cloudfront_origin_verify_secret: ${{ secrets.CLOUDFRONT_ORIGIN_VERIFY_SECRET }}
+          TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve tfplan

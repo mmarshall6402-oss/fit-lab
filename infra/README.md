@@ -75,6 +75,33 @@ needs to change.
 
 ## Applying
 
+Two ways to do this - pick one.
+
+### Option A: GitHub Actions (recommended)
+
+`.github/workflows/terraform-plan.yml` runs `terraform plan` on every PR
+touching `infra/` and posts the output as a PR comment - read it there
+before merging. `.github/workflows/terraform-apply.yml` is manual-only
+(`workflow_dispatch`) and gated twice: it targets a `aws-infra` GitHub
+Environment (create this once under repo **Settings > Environments > New
+environment**, name it `aws-infra`, and add yourself as a required
+reviewer - the job pauses until that reviewer approves it, and this can't be
+configured from the workflow file itself), and it also requires typing the
+literal phrase `apply-infra` into the `confirm` input when dispatching it.
+Neither gate is a substitute for actually reading the plan first.
+
+Both workflows reuse the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` secrets
+`deploy.yml`/`deploy-frontend.yml` already use, plus two new ones to add
+under **Settings > Secrets and variables > Actions**:
+
+- `CLOUDFRONT_ORIGIN_VERIFY_SECRET` - required (see `cloudfront_origin_verify_secret` below)
+- `ALARM_EMAIL` - optional, only needed to override the default
+
+Run the bootstrap step below once, by hand, first - both workflows'
+`terraform init` will fail until the state bucket exists.
+
+### Option B: locally
+
 ```
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # fill in real secrets, don't commit it
@@ -93,7 +120,7 @@ applying.
 terraform apply
 ```
 
-Then:
+### After applying (either option)
 1. Set `ORIGIN_VERIFY_SECRET` on the EB environment (console or
    `aws elasticbeanstalk update-environment --option-settings ...`) to the
    same value as `cloudfront_origin_verify_secret` in `terraform.tfvars`.
