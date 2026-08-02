@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+# Never commit terraform.tfvars - it holds secrets.
+
+admin_token       = "changeme-admin-token"
+jwt_secret        = "changeme-dev-only-jwt-secret-please-override-in-production-0123456789"
+anthropic_api_key = ""
+
+# Leave db_url/db_username/db_password unset to keep using the backend's
+# default local-file H2 database. Only set these once a real database
+# (e.g. RDS Postgres) is provisioned.
+# db_url      = "jdbc:postgresql://<rds-endpoint>:5432/fitlab"
+# db_username = "fitlab"
+# db_password = "..."
