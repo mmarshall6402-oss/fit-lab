@@ -4,10 +4,14 @@ import json
 import secrets
 import pickle
 import base64
+import shutil
 import numpy as np
+from datetime import datetime
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -64,6 +68,13 @@ class WardrobeInventory(BaseModel):
 # ---------------------------------------------------------------------
 FIT_MODEL_FILE = "fit_model.pkl"
 FIT_DATA_FILE = "fit_training_data.pkl"
+FIT_BACKUP_DIR = "fit_model_backups"
+FIT_HISTORY_FILE = "fit_training_history.jsonl"
+MAX_BACKUPS = 5
+# Below this many total ratings, a train/test split doesn't leave enough
+# of either to mean anything - just train on everything with no held-out
+# score yet.
+MIN_SAMPLES_FOR_HOLDOUT = 6
 
 X_memory, y_memory = [], []
 if os.path.exists(FIT_DATA_FILE):
@@ -100,17 +111,64 @@ def get_item_embedding_for_matching(item: Optional[ClothingItem]):
         return model.encode(item.description)
     return None
 
+def _log_training_history(n_samples, holdout_accuracy):
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "n_samples": n_samples,
+        "holdout_accuracy": holdout_accuracy,
+    }
+    with open(FIT_HISTORY_FILE, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+def _backup_current_model():
+    """Copies the existing fit_model.pkl aside before it gets overwritten,
+    so a refit that makes things worse can always be rolled back by hand."""
+    if not os.path.exists(FIT_MODEL_FILE):
+        return
+    os.makedirs(FIT_BACKUP_DIR, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    shutil.copy2(FIT_MODEL_FILE, os.path.join(FIT_BACKUP_DIR, f"fit_model_{stamp}.pkl"))
+    backups = sorted(os.listdir(FIT_BACKUP_DIR))
+    for old in backups[:-MAX_BACKUPS]:
+        os.remove(os.path.join(FIT_BACKUP_DIR, old))
+
 def train_fit_brain():
     global X_memory, y_memory
     if len(set(y_memory)) < 2:
         return "Data cached. Need at least 1 Good Fit AND 1 Bad Fit example to train the brain matrix."
+
+    X = np.array(X_memory)
+    y = np.array(y_memory)
+
+    # Fit a throwaway probe on a train/test split purely to measure how it
+    # does on ratings it wasn't trained on, so accuracy is tracked over time
+    # instead of always looking perfect because it's scored on its own
+    # training data. The deployed model below is still trained on
+    # everything - this is a diagnostic, not a gate.
+    holdout_note = " (not enough ratings yet for a held-out accuracy check)"
+    if len(y) >= MIN_SAMPLES_FOR_HOLDOUT:
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, stratify=y, random_state=42
+            )
+            probe = LogisticRegression()
+            probe.fit(X_train, y_train)
+            acc = accuracy_score(y_test, probe.predict(X_test))
+            _log_training_history(len(y), acc)
+            holdout_note = f" Held-out accuracy: {acc:.0%} on {len(y_test)} ratings not used for training (see {FIT_HISTORY_FILE})."
+        except ValueError:
+            # e.g. one class still has too few examples to stratify-split.
+            holdout_note = " (couldn't compute held-out accuracy yet - need more examples of both good and bad)"
+
+    _backup_current_model()
+
     clf = LogisticRegression()
-    clf.fit(np.array(X_memory), np.array(y_memory))
+    clf.fit(X, y)
     with open(FIT_MODEL_FILE, "wb") as f:
         pickle.dump(clf, f)
     with open(FIT_DATA_FILE, "wb") as f:
         pickle.dump((X_memory, y_memory), f)
-    return "Brain successfully updated and saved to fit_model.pkl!"
+    return f"Brain successfully updated and saved to fit_model.pkl!{holdout_note}"
 
 
 @app.post("/add-fit", tags=["AI Style Training"])

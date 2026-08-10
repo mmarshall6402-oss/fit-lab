@@ -1,6 +1,9 @@
 deploy-artifacts/
+.venv/
 
 # fASHION-AI: local Python env and generated model artifacts
 fASHION-AI/venv/
 fASHION-AI/__pycache__/
 fASHION-AI/*.pkl
+fASHION-AI/fit_model_backups/
+fASHION-AI/fit_training_history.jsonl
