@@ -3,9 +3,11 @@ import io
 import json
 import secrets
 import pickle
+import base64
 import numpy as np
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
+from sklearn.linear_model import LogisticRegression
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -41,10 +43,108 @@ model = SentenceTransformer('clip-ViT-B-32')
 class ClothingItem(BaseModel):
     id: int
     description: str
+    # Optional photo of the actual item, base64-encoded. fit_model.pkl is
+    # trained on real photos (see /add-fit below), so it can only be
+    # applied to an inventory item when a real photo is available too -
+    # text and image embeddings sit in different regions of CLIP's shared
+    # space even for matching content, so scoring a text embedding with an
+    # image-trained classifier would be out-of-distribution input.
+    image_base64: Optional[str] = None
 
 class WardrobeInventory(BaseModel):
     pants: List[ClothingItem]
     shoes: List[ClothingItem]
+
+# ---------------------------------------------------------------------
+# Live "general fit" brain: trained at runtime from outfits you rate via
+# /add-fit, independent of the curated color_model.pkl / silhouette_model.pkl
+# scripts. Uses real photo embeddings throughout, both at training time
+# and (when available) at inference time, to keep the two consistent.
+# ---------------------------------------------------------------------
+FIT_MODEL_FILE = "fit_model.pkl"
+FIT_DATA_FILE = "fit_training_data.pkl"
+
+X_memory, y_memory = [], []
+if os.path.exists(FIT_DATA_FILE):
+    with open(FIT_DATA_FILE, "rb") as f:
+        X_memory, y_memory = pickle.load(f)
+
+def get_image_embedding(file: Optional[UploadFile]):
+    if not file or not file.filename:
+        return np.zeros(512, dtype=np.float32)
+    try:
+        img = Image.open(io.BytesIO(file.file.read())).convert("RGB")
+        return model.encode(img)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
+
+def get_item_image_embedding(item: Optional[ClothingItem]):
+    """Real photo embedding for an inventory item, or None if it only has a text description."""
+    if not item or not item.image_base64:
+        return None
+    try:
+        img_bytes = base64.b64decode(item.image_base64)
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        return model.encode(img)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to decode image for item {item.id}: {str(e)}")
+
+def train_fit_brain():
+    global X_memory, y_memory
+    if len(set(y_memory)) < 2:
+        return "Data cached. Need at least 1 Good Fit AND 1 Bad Fit example to train the brain matrix."
+    clf = LogisticRegression()
+    clf.fit(np.array(X_memory), np.array(y_memory))
+    with open(FIT_MODEL_FILE, "wb") as f:
+        pickle.dump(clf, f)
+    with open(FIT_DATA_FILE, "wb") as f:
+        pickle.dump((X_memory, y_memory), f)
+    return "Brain successfully updated and saved to fit_model.pkl!"
+
+
+@app.post("/add-fit", tags=["AI Style Training"])
+async def add_fit(
+    label: str,
+    single_full_fit_image: Optional[UploadFile] = File(None),
+    top: Optional[UploadFile] = File(None),
+    bottom: Optional[UploadFile] = File(None),
+    shoes: Optional[UploadFile] = File(None),
+    outerwear: Optional[UploadFile] = File(None),
+    _: None = Depends(require_api_key),
+):
+    """
+    Rate a real outfit as 'good' or 'bad' to train fit_model.pkl at runtime.
+    Upload ONE picture of a full fit, OR separate top/bottom/shoes/outerwear
+    photos. This is independent of the curated color/silhouette scripts.
+    """
+    global X_memory, y_memory
+
+    label_clean = label.strip().lower()
+    if label_clean not in ["good", "bad"]:
+        raise HTTPException(status_code=400, detail="Label parameter must be exactly 'good' or 'bad'")
+
+    if single_full_fit_image and single_full_fit_image.filename:
+        fit_emb = get_image_embedding(single_full_fit_image)
+        outfit_vector = np.concatenate([fit_emb, fit_emb, fit_emb, fit_emb])
+    else:
+        if (not top or not top.filename) or (not bottom or not bottom.filename):
+            raise HTTPException(status_code=400, detail="Provide either a single full-fit image OR separate top and bottom images.")
+        top_emb = get_image_embedding(top)
+        bottom_emb = get_image_embedding(bottom)
+        shoes_emb = get_image_embedding(shoes)
+        outerwear_emb = get_image_embedding(outerwear)
+        outfit_vector = np.concatenate([top_emb, bottom_emb, shoes_emb, outerwear_emb])
+
+    X_memory.append(outfit_vector)
+    y_memory.append(1 if label_clean == "good" else 0)
+
+    status = train_fit_brain()
+
+    return {
+        "status": f"Outfit recorded as {label_clean.upper()}",
+        "engine_message": status,
+        "total_dataset_samples": len(y_memory),
+    }
 
 
 @app.post("/generate-outfit-from-top", tags=["Core Matching Engine"])
@@ -59,6 +159,7 @@ async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(
         # Load your separate custom trained brains if they exist
         color_clf = pickle.load(open("color_model.pkl", "rb")) if os.path.exists("color_model.pkl") else None
         sil_clf = pickle.load(open("silhouette_model.pkl", "rb")) if os.path.exists("silhouette_model.pkl") else None
+        fit_clf = pickle.load(open(FIT_MODEL_FILE, "rb")) if os.path.exists(FIT_MODEL_FILE) else None
 
         # 1. Base text match for pants
         pants_desc = [p.description for p in inventory.pants]
@@ -69,6 +170,8 @@ async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(
 
         ranked_pants = [{"id": p.id, "description": p.description, "match_score": float(pants_scores[idx])} for idx, p in enumerate(inventory.pants)]
         ranked_pants.sort(key=lambda x: x["match_score"], reverse=True)
+        pants_by_id = {p.id: p for p in inventory.pants}
+        best_pants_item = pants_by_id[ranked_pants[0]["id"]] if ranked_pants else None
 
         # 2. Advanced match for shoes using your custom training files
         ranked_shoes = []
@@ -92,6 +195,17 @@ async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(
                 score += float(color_clf.predict_proba(color_vec)[0][1]) * 1.5
             if sil_clf:
                 score += float(sil_clf.predict_proba(sil_vec)[0][1]) * 1.5
+
+            # fit_model.pkl only ever saw real photo embeddings during
+            # /add-fit, so only apply it when the pants/shoes items in this
+            # inventory carry a real photo too - otherwise skip it rather
+            # than score a text embedding with an image-trained model.
+            if fit_clf:
+                pants_img_emb = get_item_image_embedding(best_pants_item)
+                shoe_img_emb = get_item_image_embedding(s)
+                if pants_img_emb is not None and shoe_img_emb is not None:
+                    fit_vec = np.concatenate([top_embedding, pants_img_emb, shoe_img_emb, np.zeros(512)]).reshape(1, -1)
+                    score += float(fit_clf.predict_proba(fit_vec)[0][1]) * 1.5
 
             ranked_shoes.append({"id": s.id, "description": s.description, "match_score": score})
 
