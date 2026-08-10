@@ -1,1 +1,6 @@
 deploy-artifacts/
+
+# fASHION-AI: local Python env and generated model artifacts
+fASHION-AI/venv/
+fASHION-AI/__pycache__/
+fASHION-AI/*.pkl
