@@ -76,10 +76,11 @@ MAX_BACKUPS = 5
 # score yet.
 MIN_SAMPLES_FOR_HOLDOUT = 6
 
-X_memory, y_memory = [], []
-if os.path.exists(FIT_DATA_FILE):
-    with open(FIT_DATA_FILE, "rb") as f:
-        X_memory, y_memory = pickle.load(f)
+def load_fit_training_data():
+    if os.path.exists(FIT_DATA_FILE):
+        with open(FIT_DATA_FILE, "rb") as f:
+            return pickle.load(f)
+    return [], []
 
 def get_image_embedding(file: Optional[UploadFile]):
     if not file or not file.filename:
@@ -132,8 +133,12 @@ def _backup_current_model():
     for old in backups[:-MAX_BACKUPS]:
         os.remove(os.path.join(FIT_BACKUP_DIR, old))
 
-def train_fit_brain():
-    global X_memory, y_memory
+def train_fit_brain(X_memory, y_memory):
+    """Trains and persists fit_model.pkl from the full X_memory/y_memory
+    passed in - always loaded fresh from disk by the caller right before
+    this runs, never cached across requests, so a bulk-import script
+    writing to the same files between /add-fit calls can't get clobbered
+    by a stale in-memory copy."""
     if len(set(y_memory)) < 2:
         return "Data cached. Need at least 1 Good Fit AND 1 Bad Fit example to train the brain matrix."
 
@@ -187,8 +192,6 @@ async def add_fit(
     outerwear - just at least one image. Missing slots are zero-padded.
     This is independent of the curated color/silhouette scripts.
     """
-    global X_memory, y_memory
-
     label_clean = label.strip().lower()
     if label_clean not in ["good", "bad"]:
         raise HTTPException(status_code=400, detail="Label parameter must be exactly 'good' or 'bad'")
@@ -207,10 +210,13 @@ async def add_fit(
         outerwear_emb = get_image_embedding(outerwear)
         outfit_vector = np.concatenate([top_emb, bottom_emb, shoes_emb, outerwear_emb])
 
+    # Load fresh rather than trusting an in-memory copy - see
+    # load_fit_training_data's docstring-equivalent note above train_fit_brain.
+    X_memory, y_memory = load_fit_training_data()
     X_memory.append(outfit_vector)
     y_memory.append(1 if label_clean == "good" else 0)
 
-    status = train_fit_brain()
+    status = train_fit_brain(X_memory, y_memory)
 
     return {
         "status": f"Outfit recorded as {label_clean.upper()}",
