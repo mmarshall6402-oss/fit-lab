@@ -39,10 +39,11 @@ def require_api_key(x_api_key: str = Header(default=None)):
 
 model = SentenceTransformer('clip-ViT-B-32')
 
-# Data Structures for incoming inventory
+# Data Structures for incoming inventory. An item can be identified by a
+# photo, a text description, or both - only id is actually required.
 class ClothingItem(BaseModel):
     id: int
-    description: str
+    description: Optional[str] = None
     # Optional photo of the actual item, base64-encoded. fit_model.pkl is
     # trained on real photos (see /add-fit below), so it can only be
     # applied to an inventory item when a real photo is available too -
@@ -52,8 +53,8 @@ class ClothingItem(BaseModel):
     image_base64: Optional[str] = None
 
 class WardrobeInventory(BaseModel):
-    pants: List[ClothingItem]
-    shoes: List[ClothingItem]
+    pants: List[ClothingItem] = []
+    shoes: List[ClothingItem] = []
 
 # ---------------------------------------------------------------------
 # Live "general fit" brain: trained at runtime from outfits you rate via
@@ -89,6 +90,16 @@ def get_item_image_embedding(item: Optional[ClothingItem]):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to decode image for item {item.id}: {str(e)}")
 
+def get_item_embedding_for_matching(item: Optional[ClothingItem]):
+    """Prefers a real photo, falls back to the text description, and
+    returns None if the item has neither (nothing to score it against)."""
+    img_emb = get_item_image_embedding(item)
+    if img_emb is not None:
+        return img_emb
+    if item and item.description:
+        return model.encode(item.description)
+    return None
+
 def train_fit_brain():
     global X_memory, y_memory
     if len(set(y_memory)) < 2:
@@ -114,8 +125,9 @@ async def add_fit(
 ):
     """
     Rate a real outfit as 'good' or 'bad' to train fit_model.pkl at runtime.
-    Upload ONE picture of a full fit, OR separate top/bottom/shoes/outerwear
-    photos. This is independent of the curated color/silhouette scripts.
+    Upload any combination of a full-fit photo, top, bottom, shoes, and
+    outerwear - just at least one image. Missing slots are zero-padded.
+    This is independent of the curated color/silhouette scripts.
     """
     global X_memory, y_memory
 
@@ -123,12 +135,14 @@ async def add_fit(
     if label_clean not in ["good", "bad"]:
         raise HTTPException(status_code=400, detail="Label parameter must be exactly 'good' or 'bad'")
 
+    provided = [f for f in [single_full_fit_image, top, bottom, shoes, outerwear] if f and f.filename]
+    if not provided:
+        raise HTTPException(status_code=400, detail="Provide at least one image: a full-fit photo, or any of top/bottom/shoes/outerwear.")
+
     if single_full_fit_image and single_full_fit_image.filename:
         fit_emb = get_image_embedding(single_full_fit_image)
         outfit_vector = np.concatenate([fit_emb, fit_emb, fit_emb, fit_emb])
     else:
-        if (not top or not top.filename) or (not bottom or not bottom.filename):
-            raise HTTPException(status_code=400, detail="Provide either a single full-fit image OR separate top and bottom images.")
         top_emb = get_image_embedding(top)
         bottom_emb = get_image_embedding(bottom)
         shoes_emb = get_image_embedding(shoes)
@@ -161,14 +175,15 @@ async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(
         sil_clf = pickle.load(open("silhouette_model.pkl", "rb")) if os.path.exists("silhouette_model.pkl") else None
         fit_clf = pickle.load(open(FIT_MODEL_FILE, "rb")) if os.path.exists(FIT_MODEL_FILE) else None
 
-        # 1. Base text match for pants
-        pants_desc = [p.description for p in inventory.pants]
-        pants_scores = [0.0] * len(inventory.pants)
-        if pants_desc:
-            pants_embs = model.encode(pants_desc, convert_to_tensor=True)
-            pants_scores = util.cos_sim(top_embedding, pants_embs).tolist()[0]
-
-        ranked_pants = [{"id": p.id, "description": p.description, "match_score": float(pants_scores[idx])} for idx, p in enumerate(inventory.pants)]
+        # 1. Base match for pants - photo if the item has one, else its
+        # text description. Items with neither just score 0 and rank last.
+        ranked_pants = []
+        pants_emb_by_id = {}
+        for p in inventory.pants:
+            emb = get_item_embedding_for_matching(p)
+            pants_emb_by_id[p.id] = emb
+            score = float(util.cos_sim(top_embedding, emb)) if emb is not None else 0.0
+            ranked_pants.append({"id": p.id, "description": p.description, "match_score": score})
         ranked_pants.sort(key=lambda x: x["match_score"], reverse=True)
         pants_by_id = {p.id: p for p in inventory.pants}
         best_pants_item = pants_by_id[ranked_pants[0]["id"]] if ranked_pants else None
@@ -176,9 +191,14 @@ async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(
         # 2. Advanced match for shoes using your custom training files
         ranked_shoes = []
         for s in inventory.shoes:
-            shoe_emb = model.encode(s.description)
-            best_pants_desc = ranked_pants[0]["description"] if ranked_pants else ""
-            pants_emb = model.encode(best_pants_desc) if best_pants_desc else np.zeros(512)
+            shoe_emb = get_item_embedding_for_matching(s)
+            pants_emb = pants_emb_by_id.get(best_pants_item.id) if best_pants_item else None
+            if pants_emb is None:
+                pants_emb = np.zeros(512)
+            if shoe_emb is None:
+                # Nothing to embed this shoe with - baseline-only score of 0.
+                ranked_shoes.append({"id": s.id, "description": s.description, "match_score": 0.0})
+                continue
 
             # color_model was trained with the pants slot always zeroed out
             # (train_color_clash.py only ever fills top + shoes), so it has
