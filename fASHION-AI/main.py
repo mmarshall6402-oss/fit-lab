@@ -107,7 +107,10 @@ def shrink_and_encode_bytes(raw: bytes) -> str:
     img.save(buf, format="JPEG", quality=85)
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
-def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str) -> int:
+def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str, label: Optional[str] = None) -> int:
+    """label is the good/bad rating of the OUTFIT this photo came from
+    (via /add-fit), not a judgment on the item itself in isolation - a
+    zip upload has no rating context, so it stays None (unrated)."""
     items = load_item_bank()
     next_id = max((i["id"] for i in items), default=0) + 1
     items.append({
@@ -116,6 +119,7 @@ def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str
         "description": description,
         "image_base64": shrink_and_encode_bytes(raw_bytes),
         "source": source,
+        "label": label,
         "added_at": datetime.now().isoformat(),
     })
     save_item_bank(items)
@@ -168,12 +172,19 @@ async def upload_bank_zip(zip_file: UploadFile = File(...), _: None = Depends(re
 
 
 @app.get("/bank", tags=["Item Bank"])
-def get_bank(category: Optional[str] = None, _: None = Depends(require_api_key)):
-    """The current item bank, optionally filtered to one category."""
+def get_bank(category: Optional[str] = None, label: Optional[str] = None, _: None = Depends(require_api_key)):
+    """The current item bank, optionally filtered to one category and/or
+    label ('good', 'bad', or 'unrated' for items with no rating context,
+    like zip uploads)."""
     items = load_item_bank()
     categories = sorted(set(i["category"] for i in items))
     if category:
         items = [i for i in items if i["category"].lower() == category.lower()]
+    if label:
+        if label.lower() == "unrated":
+            items = [i for i in items if i.get("label") is None]
+        else:
+            items = [i for i in items if i.get("label") == label.lower()]
     return {"count": len(items), "categories": categories, "items": items}
 
 
@@ -226,11 +237,12 @@ def get_image_embedding(file: Optional[UploadFile]):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
 
-def get_image_embedding_and_bank(file: Optional[UploadFile], category: str):
+def get_image_embedding_and_bank(file: Optional[UploadFile], category: str, label: Optional[str] = None):
     """Same as get_image_embedding, but also adds the photo to the item
     bank under the given category - used for /add-fit's separate item
     slots (top/bottom/shoes/outerwear), which are genuine single-item
-    photos, unlike single_full_fit_image (a whole-body photo)."""
+    photos, unlike single_full_fit_image (a whole-body photo). label is
+    the good/bad rating the outfit this photo was part of received."""
     if not file or not file.filename:
         return np.zeros(512, dtype=np.float32)
     raw = file.file.read()
@@ -238,7 +250,7 @@ def get_image_embedding_and_bank(file: Optional[UploadFile], category: str):
         img = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
-    add_bank_item(category=category, description=describe_from_filename(file.filename), raw_bytes=raw, source="training_data")
+    add_bank_item(category=category, description=describe_from_filename(file.filename), raw_bytes=raw, source="training_data", label=label)
     return model.encode(img)
 
 def get_item_image_embedding(item: Optional[ClothingItem]):
@@ -362,10 +374,10 @@ async def add_fit(
         fit_emb = get_image_embedding(single_full_fit_image)
         outfit_vector = np.concatenate([fit_emb, fit_emb, fit_emb, fit_emb])
     else:
-        top_emb = get_image_embedding_and_bank(top, "top")
-        bottom_emb = get_image_embedding_and_bank(bottom, "pants")
-        shoes_emb = get_image_embedding_and_bank(shoes, "shoes")
-        outerwear_emb = get_image_embedding_and_bank(outerwear, "outerwear")
+        top_emb = get_image_embedding_and_bank(top, "top", label=label_clean)
+        bottom_emb = get_image_embedding_and_bank(bottom, "pants", label=label_clean)
+        shoes_emb = get_image_embedding_and_bank(shoes, "shoes", label=label_clean)
+        outerwear_emb = get_image_embedding_and_bank(outerwear, "outerwear", label=label_clean)
         outfit_vector = np.concatenate([top_emb, bottom_emb, shoes_emb, outerwear_emb])
 
     # Load fresh rather than trusting an in-memory copy - see
@@ -507,10 +519,13 @@ def _bank_stats():
     items = load_item_bank()
     by_category: dict[str, int] = {}
     by_source: dict[str, int] = {}
+    by_label: dict[str, int] = {}
     for i in items:
         by_category[i["category"]] = by_category.get(i["category"], 0) + 1
         by_source[i["source"]] = by_source.get(i["source"], 0) + 1
-    return {"total_items": len(items), "by_category": by_category, "by_source": by_source}
+        label_key = i.get("label") or "unrated"
+        by_label[label_key] = by_label.get(label_key, 0) + 1
+    return {"total_items": len(items), "by_category": by_category, "by_source": by_source, "by_label": by_label}
 
 
 @app.get("/docs", include_in_schema=False)
