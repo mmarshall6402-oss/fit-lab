@@ -25,7 +25,7 @@ have the backend brute-force the best-scoring combination from your catalog.
 
 <div align="center">
 
-![Java](https://skillicons.dev/icons?i=java) ![Spring](https://skillicons.dev/icons?i=spring) ![React](https://skillicons.dev/icons?i=react) ![TypeScript](https://skillicons.dev/icons?i=typescript) ![Vite](https://skillicons.dev/icons?i=vite) ![Tailwind](https://skillicons.dev/icons?i=tailwind) ![Python](https://skillicons.dev/icons?i=python) ![FastAPI](https://skillicons.dev/icons?i=fastapi) ![Postgres](https://skillicons.dev/icons?i=postgres) ![GitHub Actions](https://skillicons.dev/icons?i=githubactions)
+![Java](https://skillicons.dev/icons?i=java) ![Spring](https://skillicons.dev/icons?i=spring) ![React](https://skillicons.dev/icons?i=react) ![TypeScript](https://skillicons.dev/icons?i=typescript) ![Vite](https://skillicons.dev/icons?i=vite) ![Tailwind](https://skillicons.dev/icons?i=tailwind) ![Python](https://skillicons.dev/icons?i=python) ![FastAPI](https://skillicons.dev/icons?i=fastapi) ![Postgres](https://skillicons.dev/icons?i=postgres) ![AWS](https://skillicons.dev/icons?i=aws) ![GitHub Actions](https://skillicons.dev/icons?i=githubactions)
 
 </div>
 
@@ -68,6 +68,41 @@ flowchart LR
     Store --> Files
     REST -. "similarity lookups" .-> Embed
 ```
+
+## Deployment (AWS)
+
+Every push to `main` triggers CI/CD via GitHub Actions, deploying straight to AWS —
+no manual steps.
+
+```mermaid
+flowchart TD
+    Dev["git push → main"] --> GHA{GitHub Actions}
+
+    GHA -- "Deploy Backend" --> MB["mvn package<br/>(Java 21)"]
+    MB --> EB["Elastic Beanstalk<br/>fitlab-backend"]
+    EB --> EC2["EC2 instance(s)<br/>Spring Boot :8080"]
+
+    GHA -- "Deploy Frontend<br/>(on frontend/** changes)" --> NB["npm ci && npm run build"]
+    NB --> S3["S3 bucket<br/>fitlab-frontend-*"]
+    S3 --> CF["CloudFront<br/>cache invalidation"]
+
+    CF --> Users(["End users"])
+    EC2 --> Users
+
+    style GHA fill:#2088FF,color:#fff
+    style EB fill:#FF9900,color:#000
+    style EC2 fill:#FF9900,color:#000
+    style S3 fill:#569A31,color:#fff
+    style CF fill:#8C4FFF,color:#fff
+```
+
+| Component | Service | Trigger |
+|---|---|---|
+| Backend | AWS Elastic Beanstalk (EC2) | Every push to `main` |
+| Frontend | S3 (static hosting) + CloudFront (CDN, invalidated on deploy) | Push to `main` touching `frontend/**` |
+| Build artifacts | GitHub Actions artifact storage | Manual (`workflow_dispatch`) |
+
+Workflow definitions live in [`.github/workflows/`](.github/workflows/): [`deploy.yml`](.github/workflows/deploy.yml) (backend), [`deploy-frontend.yml`](.github/workflows/deploy-frontend.yml) (frontend), [`build-artifacts.yml`](.github/workflows/build-artifacts.yml) (on-demand build).
 
 ## Repo layout
 
