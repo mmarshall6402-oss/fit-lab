@@ -47,6 +47,7 @@
   input[type=file] { font-size: 13px; color: var(--muted); }
   .row { display: flex; gap: 16px; flex-wrap: wrap; }
   .row > div { flex: 1; min-width: 220px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
   button {
     background: var(--accent);
     color: #fff;
@@ -60,33 +61,39 @@
   }
   button:disabled { opacity: 0.5; cursor: default; }
   #status { margin-top: 10px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
-  .results { display: flex; gap: 24px; flex-wrap: wrap; }
-  .col { flex: 1; min-width: 280px; }
-  .col h2 { font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
-  .card {
+  #topPreview { max-width: 140px; max-height: 140px; border-radius: 8px; margin-top: 8px; display: none; }
+
+  /* Hero: the actual generated outfit */
+  #hero { display: none; }
+  .hero-title { font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+  .hero-row { display: flex; gap: 18px; align-items: stretch; flex-wrap: wrap; }
+  .hero-item { flex: 1; min-width: 180px; background: var(--panel); border: 2px solid var(--accent); border-radius: 12px; padding: 14px; text-align: center; }
+  .hero-item img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; background: #000; }
+  .hero-item .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }
+  .hero-item .desc { font-size: 15px; margin-top: 4px; }
+  .hero-item .score { font-size: 12px; color: var(--accent); margin-top: 4px; }
+  .hero-plus { display: flex; align-items: center; font-size: 24px; color: var(--muted); }
+
+  /* Alternatives: secondary, smaller */
+  .alternatives { margin-top: 24px; }
+  .alternatives h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-weight: normal; }
+  .alt-row { display: flex; gap: 20px; flex-wrap: wrap; }
+  .alt-col { flex: 1; min-width: 240px; }
+  .alt-card {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: 8px;
+    margin-bottom: 8px;
     align-items: center;
+    opacity: 0.85;
   }
-  .card.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  .card img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; background: #000; }
-  .card .meta { flex: 1; }
-  .card .desc { font-size: 13px; }
-  .card .score { font-size: 12px; color: var(--muted); }
-  .badge {
-    font-size: 10px;
-    background: var(--accent);
-    color: #fff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 6px;
-  }
-  #topPreview { max-width: 160px; max-height: 160px; border-radius: 8px; margin-top: 8px; display: none; }
+  .alt-card img { width: 44px; height: 44px; object-fit: cover; border-radius: 5px; background: #000; }
+  .alt-card .meta { flex: 1; }
+  .alt-card .desc { font-size: 12px; }
+  .alt-card .score { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -105,21 +112,44 @@
     </div>
   </div>
 
-  <label>Top photo (the base item)</label>
+  <label>Top photo (the base item to build an outfit around)</label>
   <input type="file" id="topFile" accept="image/*">
   <img id="topPreview">
 
-  <label>Candidate pants photos (optional, multiple)</label>
-  <input type="file" id="pantsFiles" accept="image/*" multiple>
+  <div class="row">
+    <div>
+      <label>Pants catalog (catalog_*.json from build_catalog.py)</label>
+      <input type="file" id="pantsCatalog" accept=".json" multiple>
+      <div class="hint">Your saved wardrobe - generated once, reused every time.</div>
+    </div>
+    <div>
+      <label>Shoes catalog (catalog_*.json from build_catalog.py)</label>
+      <input type="file" id="shoesCatalog" accept=".json" multiple>
+      <div class="hint">Your saved wardrobe - generated once, reused every time.</div>
+    </div>
+  </div>
 
-  <label>Candidate shoes photos (optional, multiple)</label>
-  <input type="file" id="shoesFiles" accept="image/*" multiple>
+  <div class="row">
+    <div>
+      <label>Or add extra pants photos manually (optional)</label>
+      <input type="file" id="pantsFiles" accept="image/*" multiple>
+    </div>
+    <div>
+      <label>Or add extra shoes photos manually (optional)</label>
+      <input type="file" id="shoesFiles" accept="image/*" multiple>
+    </div>
+  </div>
 
-  <button id="submitBtn" onclick="runMatch()">Rank This Outfit</button>
+  <button id="submitBtn" onclick="runMatch()">Generate My Outfit</button>
   <div id="status"></div>
 </div>
 
-<div class="results" id="results"></div>
+<div id="hero" class="panel">
+  <div class="hero-title">Your Generated Outfit</div>
+  <div class="hero-row" id="heroRow"></div>
+</div>
+
+<div class="alternatives" id="alternatives"></div>
 
 <script>
 const MAX_DIMENSION = 768;
@@ -159,51 +189,84 @@ function filenameToDescription(name) {
   return name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
 }
 
-async function buildItems(fileList) {
+function b64ToDataUrl(b64) {
+  return "data:image/jpeg;base64," + b64;
+}
+
+async function readCatalogFiles(fileList) {
+  const files = Array.from(fileList);
+  let items = [];
+  for (const file of files) {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${file.name} doesn't look like a build_catalog.py output (expected a JSON array).`);
+    }
+    items = items.concat(parsed);
+  }
+  return items;
+}
+
+async function readManualFiles(fileList, idOffset) {
   const files = Array.from(fileList);
   const items = [];
   for (let i = 0; i < files.length; i++) {
     items.push({
-      id: i + 1,
+      id: idOffset + i + 1,
       description: filenameToDescription(files[i].name),
       image_base64: await shrinkToBase64(files[i]),
-      _previewUrl: URL.createObjectURL(files[i]),
     });
   }
   return items;
 }
 
-function renderColumn(title, items, ranked) {
+// Re-number ids so catalog items + manually added items never collide.
+function renumber(items) {
+  return items.map((item, i) => ({ ...item, id: i + 1 }));
+}
+
+function renderHeroItem(label, item) {
+  const div = document.createElement("div");
+  div.className = "hero-item";
+  if (!item) {
+    div.innerHTML = `<div class="label">${label}</div><div class="desc" style="color:var(--muted)">no candidates provided</div>`;
+    return div;
+  }
+  div.innerHTML =
+    `<img src="${item._imgSrc}">` +
+    `<div class="label">${label}</div>` +
+    `<div class="desc">${item.description || "(no description)"}</div>` +
+    `<div class="score">score: ${item.match_score.toFixed(3)}</div>`;
+  return div;
+}
+
+function renderAlternatives(title, byId, ranked) {
   const col = document.createElement("div");
-  col.className = "col";
+  col.className = "alt-col";
   const h2 = document.createElement("h2");
-  h2.textContent = title;
+  h2.textContent = title + " - other options";
   col.appendChild(h2);
 
-  if (!ranked || ranked.length === 0) {
+  const rest = (ranked || []).slice(1); // best one is already in the hero
+  if (rest.length === 0) {
     const p = document.createElement("div");
     p.style.color = "var(--muted)";
-    p.style.fontSize = "13px";
-    p.textContent = "No candidates provided.";
+    p.style.fontSize = "12px";
+    p.textContent = "No other candidates.";
     col.appendChild(p);
     return col;
   }
 
-  const byId = {};
-  items.forEach(it => byId[it.id] = it);
-
-  ranked.forEach((r, idx) => {
+  rest.forEach(r => {
     const card = document.createElement("div");
-    card.className = "card" + (idx === 0 ? " best" : "");
-    const img = document.createElement("img");
-    img.src = byId[r.id] ? byId[r.id]._previewUrl : "";
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.innerHTML =
-      `<div class="desc">${r.description || "(no description)"}${idx === 0 ? '<span class="badge">BEST MATCH</span>' : ""}</div>` +
-      `<div class="score">score: ${r.match_score.toFixed(3)}</div>`;
-    card.appendChild(img);
-    card.appendChild(meta);
+    card.className = "alt-card";
+    const src = byId[r.id] ? byId[r.id]._imgSrc : "";
+    card.innerHTML =
+      `<img src="${src}">` +
+      `<div class="meta">` +
+      `<div class="desc">${r.description || "(no description)"}</div>` +
+      `<div class="score">score: ${r.match_score.toFixed(3)}</div>` +
+      `</div>`;
     col.appendChild(card);
   });
 
@@ -212,29 +275,41 @@ function renderColumn(title, items, ranked) {
 
 async function runMatch() {
   const statusEl = document.getElementById("status");
-  const resultsEl = document.getElementById("results");
+  const heroEl = document.getElementById("hero");
+  const heroRowEl = document.getElementById("heroRow");
+  const altEl = document.getElementById("alternatives");
   const btn = document.getElementById("submitBtn");
-  resultsEl.innerHTML = "";
+  heroEl.style.display = "none";
+  heroRowEl.innerHTML = "";
+  altEl.innerHTML = "";
 
   const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
   const apiKey = document.getElementById("apiKey").value.trim();
   const topFile = document.getElementById("topFile").files[0];
-  const pantsFiles = document.getElementById("pantsFiles").files;
-  const shoesFiles = document.getElementById("shoesFiles").files;
 
   if (!apiKey) { statusEl.textContent = "Enter your X-API-Key first."; return; }
   if (!topFile) { statusEl.textContent = "Pick a top photo first."; return; }
 
   btn.disabled = true;
-  statusEl.textContent = "Encoding images...";
+  statusEl.textContent = "Loading catalog + encoding photos...";
 
   try {
-    const pantsItems = await buildItems(pantsFiles);
-    const shoesItems = await buildItems(shoesFiles);
+    const pantsCatalogItems = await readCatalogFiles(document.getElementById("pantsCatalog").files);
+    const shoesCatalogItems = await readCatalogFiles(document.getElementById("shoesCatalog").files);
+    const pantsManualItems = await readManualFiles(document.getElementById("pantsFiles").files, pantsCatalogItems.length);
+    const shoesManualItems = await readManualFiles(document.getElementById("shoesFiles").files, shoesCatalogItems.length);
+
+    const pantsItems = renumber([...pantsCatalogItems, ...pantsManualItems]);
+    const shoesItems = renumber([...shoesCatalogItems, ...shoesManualItems]);
+
+    const pantsById = {};
+    pantsItems.forEach(it => pantsById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });
+    const shoesById = {};
+    shoesItems.forEach(it => shoesById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });
 
     const inventory = {
-      pants: pantsItems.map(({ _previewUrl, ...rest }) => rest),
-      shoes: shoesItems.map(({ _previewUrl, ...rest }) => rest),
+      pants: pantsItems.map(({ id, description, image_base64 }) => ({ id, description, image_base64 })),
+      shoes: shoesItems.map(({ id, description, image_base64 }) => ({ id, description, image_base64 })),
     };
 
     statusEl.textContent = "Sending to " + serverUrl + " ...";
@@ -260,8 +335,47 @@ async function runMatch() {
     statusEl.textContent = `OK (${resp.status})`;
 
     const rec = body.recommended_outfit || {};
-    resultsEl.appendChild(renderColumn("Pants", pantsItems, rec.best_pants_match));
-    resultsEl.appendChild(renderColumn("Shoes", shoesItems, rec.best_shoes_match));
+    const bestPants = rec.best_pants_match && rec.best_pants_match[0];
+    const bestShoes = rec.best_shoes_match && rec.best_shoes_match[0];
+
+    const topReader = new FileReader();
+    topReader.onload = () => {
+      const topItem = { _imgSrc: topReader.result, description: filenameToDescription(topFile.name), match_score: null };
+      heroRowEl.innerHTML = "";
+      const topDiv = document.createElement("div");
+      topDiv.className = "hero-item";
+      topDiv.innerHTML = `<img src="${topItem._imgSrc}"><div class="label">Top</div><div class="desc">${topItem.description}</div>`;
+      heroRowEl.appendChild(topDiv);
+
+      const plus1 = document.createElement("div");
+      plus1.className = "hero-plus";
+      plus1.textContent = "+";
+      heroRowEl.appendChild(plus1);
+
+      heroRowEl.appendChild(renderHeroItem(
+        "Pants",
+        bestPants ? { ...bestPants, _imgSrc: pantsById[bestPants.id] ? pantsById[bestPants.id]._imgSrc : "" } : null
+      ));
+
+      const plus2 = document.createElement("div");
+      plus2.className = "hero-plus";
+      plus2.textContent = "+";
+      heroRowEl.appendChild(plus2);
+
+      heroRowEl.appendChild(renderHeroItem(
+        "Shoes",
+        bestShoes ? { ...bestShoes, _imgSrc: shoesById[bestShoes.id] ? shoesById[bestShoes.id]._imgSrc : "" } : null
+      ));
+
+      heroEl.style.display = "block";
+    };
+    topReader.readAsDataURL(topFile);
+
+    const altRow = document.createElement("div");
+    altRow.className = "alt-row";
+    altRow.appendChild(renderAlternatives("Pants", pantsById, rec.best_pants_match));
+    altRow.appendChild(renderAlternatives("Shoes", shoesById, rec.best_shoes_match));
+    altEl.appendChild(altRow);
   } catch (err) {
     statusEl.textContent = "Request failed: " + err.message + "\n(Check the server is running, and that ALLOWED_ORIGINS includes the origin this page is served from - see instructions.)";
   } finally {
