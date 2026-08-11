@@ -206,6 +206,15 @@ function b64ToDataUrl(b64) {
 
 let bankItemsByCategory = {};
 
+function pickDefaultCategory(categories, aliases) {
+  const lowerToOriginal = {};
+  categories.forEach(c => { lowerToOriginal[c.toLowerCase()] = c; });
+  for (const alias of aliases) {
+    if (lowerToOriginal[alias]) return lowerToOriginal[alias];
+  }
+  return "";
+}
+
 async function loadBank() {
   const statusEl = document.getElementById("bankStatus");
   const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
@@ -234,9 +243,14 @@ async function loadBank() {
     ).join("");
     pantsSelect.innerHTML = options;
     shoesSelect.innerHTML = options;
-    // Reasonable defaults if a category is literally named "pants"/"shoes".
-    if (body.categories.includes("pants")) pantsSelect.value = "pants";
-    if (body.categories.includes("shoes")) shoesSelect.value = "shoes";
+    // Auto-pick a sensible default category per slot, matching common
+    // names rather than requiring the category to literally be called
+    // "pants"/"shoes" - e.g. a bulk-uploaded "sneakers" folder should
+    // default into the shoes slot without the user hunting for it.
+    const defaultPants = pickDefaultCategory(body.categories, ["pants", "bottoms", "bottom", "jeans", "trousers"]);
+    const defaultShoes = pickDefaultCategory(body.categories, ["shoes", "sneakers", "kicks", "footwear"]);
+    if (defaultPants) pantsSelect.value = defaultPants;
+    if (defaultShoes) shoesSelect.value = defaultShoes;
 
     statusEl.textContent = `Loaded ${body.count} items across ${body.categories.length} categories: ${body.categories.join(", ") || "(bank is empty)"}`;
   } catch (err) {
