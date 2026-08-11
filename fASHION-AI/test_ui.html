@@ -45,6 +45,15 @@
     font-size: 14px;
   }
   input[type=file] { font-size: 13px; color: var(--muted); }
+  select {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
   .row { display: flex; gap: 16px; flex-wrap: wrap; }
   .row > div { flex: 1; min-width: 220px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -116,26 +125,28 @@
   <input type="file" id="topFile" accept="image/*">
   <img id="topPreview">
 
+  <label>Item bank (persistent server-side pool - upload zips via POST /bank/upload-zip or rate outfits via /add-fit to grow it)</label>
+  <button type="button" id="loadBankBtn" onclick="loadBank()" style="margin-top:0;">Load Bank From Server</button>
+  <div id="bankStatus" class="hint"></div>
+
   <div class="row">
     <div>
-      <label>Pants catalog (catalog_*.json from build_catalog.py)</label>
-      <input type="file" id="pantsCatalog" accept=".json" multiple>
-      <div class="hint">Your saved wardrobe - generated once, reused every time.</div>
+      <label>Pants come from bank category</label>
+      <select id="pantsCategorySelect"><option value="">(load bank first)</option></select>
     </div>
     <div>
-      <label>Shoes catalog (catalog_*.json from build_catalog.py)</label>
-      <input type="file" id="shoesCatalog" accept=".json" multiple>
-      <div class="hint">Your saved wardrobe - generated once, reused every time.</div>
+      <label>Shoes come from bank category</label>
+      <select id="shoesCategorySelect"><option value="">(load bank first)</option></select>
     </div>
   </div>
 
   <div class="row">
     <div>
-      <label>Or add extra pants photos manually (optional)</label>
+      <label>Or add extra pants photos manually, on top of the bank (optional)</label>
       <input type="file" id="pantsFiles" accept="image/*" multiple>
     </div>
     <div>
-      <label>Or add extra shoes photos manually (optional)</label>
+      <label>Or add extra shoes photos manually, on top of the bank (optional)</label>
       <input type="file" id="shoesFiles" accept="image/*" multiple>
     </div>
   </div>
@@ -193,18 +204,44 @@ function b64ToDataUrl(b64) {
   return "data:image/jpeg;base64," + b64;
 }
 
-async function readCatalogFiles(fileList) {
-  const files = Array.from(fileList);
-  let items = [];
-  for (const file of files) {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    if (!Array.isArray(parsed)) {
-      throw new Error(`${file.name} doesn't look like a build_catalog.py output (expected a JSON array).`);
+let bankItemsByCategory = {};
+
+async function loadBank() {
+  const statusEl = document.getElementById("bankStatus");
+  const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
+  const apiKey = document.getElementById("apiKey").value.trim();
+  if (!apiKey) { statusEl.textContent = "Enter your X-API-Key first."; return; }
+
+  statusEl.textContent = "Loading bank...";
+  try {
+    const resp = await fetch(serverUrl + "/bank", { headers: { "X-API-Key": apiKey } });
+    const body = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error ${resp.status}: ${body.detail || JSON.stringify(body)}`;
+      return;
     }
-    items = items.concat(parsed);
+
+    bankItemsByCategory = {};
+    body.items.forEach(item => {
+      if (!bankItemsByCategory[item.category]) bankItemsByCategory[item.category] = [];
+      bankItemsByCategory[item.category].push(item);
+    });
+
+    const pantsSelect = document.getElementById("pantsCategorySelect");
+    const shoesSelect = document.getElementById("shoesCategorySelect");
+    const options = ['<option value="">(none)</option>'].concat(
+      body.categories.map(c => `<option value="${c}">${c} (${bankItemsByCategory[c].length})</option>`)
+    ).join("");
+    pantsSelect.innerHTML = options;
+    shoesSelect.innerHTML = options;
+    // Reasonable defaults if a category is literally named "pants"/"shoes".
+    if (body.categories.includes("pants")) pantsSelect.value = "pants";
+    if (body.categories.includes("shoes")) shoesSelect.value = "shoes";
+
+    statusEl.textContent = `Loaded ${body.count} items across ${body.categories.length} categories: ${body.categories.join(", ") || "(bank is empty)"}`;
+  } catch (err) {
+    statusEl.textContent = "Failed to load bank: " + err.message;
   }
-  return items;
 }
 
 async function readManualFiles(fileList, idOffset) {
@@ -291,16 +328,18 @@ async function runMatch() {
   if (!topFile) { statusEl.textContent = "Pick a top photo first."; return; }
 
   btn.disabled = true;
-  statusEl.textContent = "Loading catalog + encoding photos...";
+  statusEl.textContent = "Preparing photos...";
 
   try {
-    const pantsCatalogItems = await readCatalogFiles(document.getElementById("pantsCatalog").files);
-    const shoesCatalogItems = await readCatalogFiles(document.getElementById("shoesCatalog").files);
-    const pantsManualItems = await readManualFiles(document.getElementById("pantsFiles").files, pantsCatalogItems.length);
-    const shoesManualItems = await readManualFiles(document.getElementById("shoesFiles").files, shoesCatalogItems.length);
+    const pantsCategory = document.getElementById("pantsCategorySelect").value;
+    const shoesCategory = document.getElementById("shoesCategorySelect").value;
+    const pantsBankItems = pantsCategory ? (bankItemsByCategory[pantsCategory] || []) : [];
+    const shoesBankItems = shoesCategory ? (bankItemsByCategory[shoesCategory] || []) : [];
+    const pantsManualItems = await readManualFiles(document.getElementById("pantsFiles").files, pantsBankItems.length);
+    const shoesManualItems = await readManualFiles(document.getElementById("shoesFiles").files, shoesBankItems.length);
 
-    const pantsItems = renumber([...pantsCatalogItems, ...pantsManualItems]);
-    const shoesItems = renumber([...shoesCatalogItems, ...shoesManualItems]);
+    const pantsItems = renumber([...pantsBankItems, ...pantsManualItems]);
+    const shoesItems = renumber([...shoesBankItems, ...shoesManualItems]);
 
     const pantsById = {};
     pantsItems.forEach(it => pantsById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });

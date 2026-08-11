@@ -5,6 +5,7 @@ import secrets
 import pickle
 import base64
 import shutil
+import zipfile
 import numpy as np
 from datetime import datetime
 from typing import List, Optional
@@ -61,6 +62,114 @@ class WardrobeInventory(BaseModel):
     shoes: List[ClothingItem] = []
 
 # ---------------------------------------------------------------------
+# Item bank: a persistent, growing pool of individual item photos (any
+# category - sneakers, shirts, whatever) that /generate-outfit-from-top
+# candidates can be pulled from, no good/bad label needed. Two ways items
+# land in it: bulk zip upload via /bank/upload-zip, or automatically from
+# /add-fit whenever you rate an outfit using separate top/bottom/shoes/
+# outerwear slots (a single_full_fit_image is a whole-body photo, not a
+# single item, so that path is excluded).
+# ---------------------------------------------------------------------
+ITEM_BANK_FILE = "item_bank.json"
+BANK_MAX_DIMENSION = 768
+BANK_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+def load_item_bank():
+    if os.path.exists(ITEM_BANK_FILE):
+        with open(ITEM_BANK_FILE) as f:
+            return json.load(f)
+    return []
+
+def save_item_bank(items):
+    with open(ITEM_BANK_FILE, "w") as f:
+        json.dump(items, f)
+
+def describe_from_filename(filename: str) -> str:
+    stem = os.path.splitext(filename)[0].replace("_", " ").replace("-", " ")
+    return " ".join(stem.split())
+
+def shrink_and_encode_bytes(raw: bytes) -> str:
+    """CLIP resizes every image internally anyway (~224x224), so a full
+    camera photo is wasted bloat - and this can end up embedded in
+    inventory_json, a Form field Starlette hard-caps at 1MB. Shrinking
+    before storing keeps the bank (and anything built from it) small."""
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+    img.thumbnail((BANK_MAX_DIMENSION, BANK_MAX_DIMENSION))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str) -> int:
+    items = load_item_bank()
+    next_id = max((i["id"] for i in items), default=0) + 1
+    items.append({
+        "id": next_id,
+        "category": category,
+        "description": description,
+        "image_base64": shrink_and_encode_bytes(raw_bytes),
+        "source": source,
+        "added_at": datetime.now().isoformat(),
+    })
+    save_item_bank(items)
+    return next_id
+
+
+@app.post("/bank/upload-zip", tags=["Item Bank"])
+async def upload_bank_zip(zip_file: UploadFile = File(...), _: None = Depends(require_api_key)):
+    """
+    Upload a zip with one subfolder per category (e.g. sneakers/, shirts/)
+    to grow the persistent item bank - no good/bad label, this is just a
+    pool of candidates /generate-outfit-from-top can pick from. Adds to
+    the existing bank rather than replacing it.
+    """
+    if not zip_file.filename or not zip_file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Expected a .zip file")
+
+    raw_zip = await zip_file.read()
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw_zip))
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Not a valid zip file")
+
+    added_by_category: dict[str, int] = {}
+    for name in zf.namelist():
+        if name.endswith("/") or "__MACOSX" in name:
+            continue
+        parts = name.split("/")
+        if len(parts) < 2:
+            continue  # not inside a category subfolder, skip
+        category = parts[0]
+        filename = parts[-1]
+        if os.path.splitext(filename)[1].lower() not in BANK_IMAGE_EXTS:
+            continue
+        try:
+            add_bank_item(
+                category=category,
+                description=describe_from_filename(filename),
+                raw_bytes=zf.read(name),
+                source="zip_upload",
+            )
+        except Exception:
+            continue  # skip unreadable files rather than failing the whole batch
+        added_by_category[category] = added_by_category.get(category, 0) + 1
+
+    if not added_by_category:
+        raise HTTPException(status_code=400, detail="No images found inside category subfolders (e.g. sneakers/, shirts/).")
+
+    return {"added": added_by_category, "total_bank_size": len(load_item_bank())}
+
+
+@app.get("/bank", tags=["Item Bank"])
+def get_bank(category: Optional[str] = None, _: None = Depends(require_api_key)):
+    """The current item bank, optionally filtered to one category."""
+    items = load_item_bank()
+    categories = sorted(set(i["category"] for i in items))
+    if category:
+        items = [i for i in items if i["category"].lower() == category.lower()]
+    return {"count": len(items), "categories": categories, "items": items}
+
+
+# ---------------------------------------------------------------------
 # Live "general fit" brain: trained at runtime from outfits you rate via
 # /add-fit, independent of the curated color_model.pkl / silhouette_model.pkl
 # scripts. Uses real photo embeddings throughout, both at training time
@@ -90,6 +199,21 @@ def get_image_embedding(file: Optional[UploadFile]):
         return model.encode(img)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
+
+def get_image_embedding_and_bank(file: Optional[UploadFile], category: str):
+    """Same as get_image_embedding, but also adds the photo to the item
+    bank under the given category - used for /add-fit's separate item
+    slots (top/bottom/shoes/outerwear), which are genuine single-item
+    photos, unlike single_full_fit_image (a whole-body photo)."""
+    if not file or not file.filename:
+        return np.zeros(512, dtype=np.float32)
+    raw = file.file.read()
+    try:
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
+    add_bank_item(category=category, description=describe_from_filename(file.filename), raw_bytes=raw, source="training_data")
+    return model.encode(img)
 
 def get_item_image_embedding(item: Optional[ClothingItem]):
     """Real photo embedding for an inventory item, or None if it only has a text description."""
@@ -207,13 +331,15 @@ async def add_fit(
         raise HTTPException(status_code=400, detail="Provide at least one image: a full-fit photo, or any of top/bottom/shoes/outerwear.")
 
     if single_full_fit_image and single_full_fit_image.filename:
+        # A whole-body photo, not a single item - doesn't belong in the
+        # item bank alongside individual sneaker/shirt/etc. photos.
         fit_emb = get_image_embedding(single_full_fit_image)
         outfit_vector = np.concatenate([fit_emb, fit_emb, fit_emb, fit_emb])
     else:
-        top_emb = get_image_embedding(top)
-        bottom_emb = get_image_embedding(bottom)
-        shoes_emb = get_image_embedding(shoes)
-        outerwear_emb = get_image_embedding(outerwear)
+        top_emb = get_image_embedding_and_bank(top, "top")
+        bottom_emb = get_image_embedding_and_bank(bottom, "pants")
+        shoes_emb = get_image_embedding_and_bank(shoes, "shoes")
+        outerwear_emb = get_image_embedding_and_bank(outerwear, "outerwear")
         outfit_vector = np.concatenate([top_emb, bottom_emb, shoes_emb, outerwear_emb])
 
     # Load fresh rather than trusting an in-memory copy - see
@@ -345,7 +471,18 @@ def get_stats(_: None = Depends(require_api_key)):
         },
         "color_model": _read_json_if_exists("color_model_meta.json") or {"trained": os.path.exists("color_model.pkl"), "note": "meta file missing - rerun train_color_clash.py to record counts"},
         "silhouette_model": _read_json_if_exists("silhouette_model_meta.json") or {"trained": os.path.exists("silhouette_model.pkl"), "note": "meta file missing - rerun train_silhouette.py to record counts"},
+        "item_bank": _bank_stats(),
     }
+
+
+def _bank_stats():
+    items = load_item_bank()
+    by_category: dict[str, int] = {}
+    by_source: dict[str, int] = {}
+    for i in items:
+        by_category[i["category"]] = by_category.get(i["category"], 0) + 1
+        by_source[i["source"]] = by_source.get(i["source"], 0) + 1
+    return {"total_items": len(items), "by_category": by_category, "by_source": by_source}
 
 
 @app.get("/docs", include_in_schema=False)
