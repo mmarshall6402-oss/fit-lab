@@ -258,22 +258,20 @@ async function loadBank() {
   }
 }
 
-async function readManualFiles(fileList, idOffset) {
+// Negative ids so manually-added photos can never collide with real
+// (always positive) item bank ids - the server merges both without
+// renumbering anything, so this has to hold up on its own.
+async function readManualFiles(fileList) {
   const files = Array.from(fileList);
   const items = [];
   for (let i = 0; i < files.length; i++) {
     items.push({
-      id: idOffset + i + 1,
+      id: -(i + 1),
       description: filenameToDescription(files[i].name),
       image_base64: await shrinkToBase64(files[i]),
     });
   }
   return items;
-}
-
-// Re-number ids so catalog items + manually added items never collide.
-function renumber(items) {
-  return items.map((item, i) => ({ ...item, id: i + 1 }));
 }
 
 function renderHeroItem(label, item) {
@@ -349,20 +347,27 @@ async function runMatch() {
     const shoesCategory = document.getElementById("shoesCategorySelect").value;
     const pantsBankItems = pantsCategory ? (bankItemsByCategory[pantsCategory] || []) : [];
     const shoesBankItems = shoesCategory ? (bankItemsByCategory[shoesCategory] || []) : [];
-    const pantsManualItems = await readManualFiles(document.getElementById("pantsFiles").files, pantsBankItems.length);
-    const shoesManualItems = await readManualFiles(document.getElementById("shoesFiles").files, shoesBankItems.length);
+    const pantsManualItems = await readManualFiles(document.getElementById("pantsFiles").files);
+    const shoesManualItems = await readManualFiles(document.getElementById("shoesFiles").files);
 
-    const pantsItems = renumber([...pantsBankItems, ...pantsManualItems]);
-    const shoesItems = renumber([...shoesBankItems, ...shoesManualItems]);
-
+    // Lookup maps for rendering thumbnails later - covers both bank items
+    // (real positive ids, photo already known from loadBank()) and manual
+    // ones (negative ids, photo just encoded above).
     const pantsById = {};
-    pantsItems.forEach(it => pantsById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });
+    [...pantsBankItems, ...pantsManualItems].forEach(it => pantsById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });
     const shoesById = {};
-    shoesItems.forEach(it => shoesById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });
+    [...shoesBankItems, ...shoesManualItems].forEach(it => shoesById[it.id] = { ...it, _imgSrc: b64ToDataUrl(it.image_base64) });
 
+    // Bank items are referenced by category, not re-uploaded - the server
+    // already has their photo data. Only the (typically few) manually
+    // added extras actually need their base64 sent over the wire, which
+    // is what keeps this under inventory_json's 1MB cap even when the
+    // bank itself has dozens of photos in it.
     const inventory = {
-      pants: pantsItems.map(({ id, description, image_base64 }) => ({ id, description, image_base64 })),
-      shoes: shoesItems.map(({ id, description, image_base64 }) => ({ id, description, image_base64 })),
+      pants: pantsManualItems.map(({ id, description, image_base64 }) => ({ id, description, image_base64 })),
+      shoes: shoesManualItems.map(({ id, description, image_base64 }) => ({ id, description, image_base64 })),
+      pants_bank_category: pantsCategory || null,
+      shoes_bank_category: shoesCategory || null,
     };
 
     statusEl.textContent = "Sending to " + serverUrl + " ...";

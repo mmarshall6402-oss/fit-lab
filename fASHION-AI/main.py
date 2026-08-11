@@ -60,6 +60,14 @@ class ClothingItem(BaseModel):
 class WardrobeInventory(BaseModel):
     pants: List[ClothingItem] = []
     shoes: List[ClothingItem] = []
+    # Pull every item in this item-bank category as additional candidates,
+    # WITHOUT the client re-uploading their photo data - it's already
+    # stored server-side. This is what makes a bank of any real size
+    # (dozens+ photos) usable at all: embedding even a handful of shrunk
+    # photos directly in inventory_json can still blow past Starlette's
+    # 1MB Form field cap once there are enough of them.
+    pants_bank_category: Optional[str] = None
+    shoes_bank_category: Optional[str] = None
 
 # ---------------------------------------------------------------------
 # Item bank: a persistent, growing pool of individual item photos (any
@@ -167,6 +175,24 @@ def get_bank(category: Optional[str] = None, _: None = Depends(require_api_key))
     if category:
         items = [i for i in items if i["category"].lower() == category.lower()]
     return {"count": len(items), "categories": categories, "items": items}
+
+
+def resolve_candidates(explicit_items: List[ClothingItem], bank_category: Optional[str]) -> List[ClothingItem]:
+    """Merges any explicitly-supplied items with every item from the given
+    bank category, pulling their photo data straight from item_bank.json
+    instead of requiring the client to have sent it. IDs aren't touched -
+    the client is responsible for using ids that won't collide with real
+    bank ids (e.g. negative ids for one-off manual uploads), since the
+    response echoes back whichever id matched so the caller can look up
+    the right item on their end."""
+    if not bank_category:
+        return explicit_items
+    bank_matches = [
+        ClothingItem(id=i["id"], description=i["description"], image_base64=i["image_base64"])
+        for i in load_item_bank()
+        if i["category"].lower() == bank_category.lower()
+    ]
+    return explicit_items + bank_matches
 
 
 # ---------------------------------------------------------------------
@@ -367,6 +393,8 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
     try:
         data = json.loads(inventory_json)
         inventory = WardrobeInventory(**data)
+        inventory.pants = resolve_candidates(inventory.pants, inventory.pants_bank_category)
+        inventory.shoes = resolve_candidates(inventory.shoes, inventory.shoes_bank_category)
 
         top_image = Image.open(io.BytesIO(await file.read())).convert("RGB")
         top_embedding = model.encode(top_image)
