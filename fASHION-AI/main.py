@@ -96,16 +96,23 @@ def describe_from_filename(filename: str) -> str:
     stem = os.path.splitext(filename)[0].replace("_", " ").replace("-", " ")
     return " ".join(stem.split())
 
-def shrink_and_encode_bytes(raw: bytes) -> str:
-    """CLIP resizes every image internally anyway (~224x224), so a full
-    camera photo is wasted bloat - and this can end up embedded in
-    inventory_json, a Form field Starlette hard-caps at 1MB. Shrinking
-    before storing keeps the bank (and anything built from it) small."""
+def process_image_for_bank(raw: bytes):
+    """Shrinks + JPEG-encodes the photo for storage (CLIP resizes every
+    image internally anyway (~224x224), so a full camera photo is wasted
+    bloat - and this can end up embedded in inventory_json, a Form field
+    Starlette hard-caps at 1MB), AND computes its CLIP embedding once
+    here at upload time. Caching the embedding on the bank item means
+    /generate-outfit-from-top can look it up instead of re-decoding and
+    re-running CLIP on the same unchanged photo on every single request -
+    with a bank of dozens of items, that repeated re-encoding was the
+    entire cost of the endpoint."""
     img = Image.open(io.BytesIO(raw)).convert("RGB")
     img.thumbnail((BANK_MAX_DIMENSION, BANK_MAX_DIMENSION))
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    embedding = model.encode(img).tolist()
+    return b64, embedding
 
 def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str, label: Optional[str] = None) -> int:
     """label is the good/bad rating of the OUTFIT this photo came from
@@ -113,11 +120,13 @@ def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str
     zip upload has no rating context, so it stays None (unrated)."""
     items = load_item_bank()
     next_id = max((i["id"] for i in items), default=0) + 1
+    image_b64, embedding = process_image_for_bank(raw_bytes)
     items.append({
         "id": next_id,
         "category": category,
         "description": description,
-        "image_base64": shrink_and_encode_bytes(raw_bytes),
+        "image_base64": image_b64,
+        "embedding": embedding,
         "source": source,
         "label": label,
         "added_at": datetime.now().isoformat(),
@@ -188,19 +197,20 @@ def get_bank(category: Optional[str] = None, label: Optional[str] = None, _: Non
     return {"count": len(items), "categories": categories, "items": items}
 
 
-def resolve_candidates(explicit_items: List[ClothingItem], bank_category: Optional[str]) -> List[ClothingItem]:
+def resolve_candidates(explicit_items: List[ClothingItem], bank_category: Optional[str], bank_items: list) -> List[ClothingItem]:
     """Merges any explicitly-supplied items with every item from the given
-    bank category, pulling their photo data straight from item_bank.json
-    instead of requiring the client to have sent it. IDs aren't touched -
-    the client is responsible for using ids that won't collide with real
-    bank ids (e.g. negative ids for one-off manual uploads), since the
-    response echoes back whichever id matched so the caller can look up
-    the right item on their end."""
+    bank category, pulling their photo data straight from the already-
+    loaded bank_items instead of requiring the client to have sent it (or
+    re-reading item_bank.json from disk a second time for the other
+    slot). IDs aren't touched - the client is responsible for using ids
+    that won't collide with real bank ids (e.g. negative ids for one-off
+    manual uploads), since the response echoes back whichever id matched
+    so the caller can look up the right item on their end."""
     if not bank_category:
         return explicit_items
     bank_matches = [
         ClothingItem(id=i["id"], description=i["description"], image_base64=i["image_base64"])
-        for i in load_item_bank()
+        for i in bank_items
         if i["category"].lower() == bank_category.lower()
     ]
     return explicit_items + bank_matches
@@ -253,26 +263,55 @@ def get_image_embedding_and_bank(file: Optional[UploadFile], category: str, labe
     add_bank_item(category=category, description=describe_from_filename(file.filename), raw_bytes=raw, source="training_data", label=label)
     return model.encode(img)
 
-def get_item_image_embedding(item: Optional[ClothingItem]):
-    """Real photo embedding for an inventory item, or None if it only has a text description."""
-    if not item or not item.image_base64:
-        return None
-    try:
-        img_bytes = base64.b64decode(item.image_base64)
-        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        return model.encode(img)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to decode image for item {item.id}: {str(e)}")
+def get_items_embeddings_for_matching(items: List[ClothingItem], embedding_cache: Optional[dict] = None):
+    """Batch version of the old per-item encode: decodes every item's
+    photo (or falls back to its text description) up front, then runs
+    CLIP exactly once per modality - all images together, all
+    descriptions together - instead of once per item. A single batched
+    .encode() call is dramatically faster than N sequential single-item
+    calls (CLIP has real fixed overhead per call, especially on CPU),
+    which matters a lot once a bank category has dozens of items.
 
-def get_item_embedding_for_matching(item: Optional[ClothingItem]):
-    """Prefers a real photo, falls back to the text description, and
-    returns None if the item has neither (nothing to score it against)."""
-    img_emb = get_item_image_embedding(item)
-    if img_emb is not None:
-        return img_emb
-    if item and item.description:
-        return model.encode(item.description)
-    return None
+    embedding_cache maps item id -> precomputed embedding (list of
+    floats, as stored on bank items - see process_image_for_bank). Bank
+    items hit this cache and skip decode+encode entirely, which is what
+    makes repeat requests against a large bank fast - only genuinely new
+    (non-bank) items need to be encoded here at all.
+
+    Returns a list of (embedding_or_None, is_image), same order as
+    `items`. is_image tells the caller whether that embedding is safe to
+    reuse for fit_clf (image-trained) without re-encoding."""
+    embedding_cache = embedding_cache or {}
+    results = [None] * len(items)
+    image_indices, images = [], []
+    text_indices, texts = [], []
+
+    for idx, item in enumerate(items):
+        if item and item.id in embedding_cache:
+            results[idx] = (np.array(embedding_cache[item.id], dtype=np.float32), True)
+        elif item and item.image_base64:
+            try:
+                img_bytes = base64.b64decode(item.image_base64)
+                img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to decode image for item {item.id}: {str(e)}")
+            image_indices.append(idx)
+            images.append(img)
+        elif item and item.description:
+            text_indices.append(idx)
+            texts.append(item.description)
+        # else: nothing to embed this item with - stays None below.
+
+    if images:
+        img_embs = model.encode(images)
+        for i, idx in enumerate(image_indices):
+            results[idx] = (img_embs[i], True)
+    if texts:
+        text_embs = model.encode(texts)
+        for i, idx in enumerate(text_indices):
+            results[idx] = (text_embs[i], False)
+
+    return [r if r is not None else (None, False) for r in results]
 
 def _log_training_history(n_samples, holdout_accuracy):
     entry = {
@@ -405,8 +444,13 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
     try:
         data = json.loads(inventory_json)
         inventory = WardrobeInventory(**data)
-        inventory.pants = resolve_candidates(inventory.pants, inventory.pants_bank_category)
-        inventory.shoes = resolve_candidates(inventory.shoes, inventory.shoes_bank_category)
+        bank_items = load_item_bank()  # loaded once, reused for both slots below
+        inventory.pants = resolve_candidates(inventory.pants, inventory.pants_bank_category, bank_items)
+        inventory.shoes = resolve_candidates(inventory.shoes, inventory.shoes_bank_category, bank_items)
+        # Bank items carry a precomputed embedding (see process_image_for_bank) -
+        # only items missing one (older bank entries from before this existed)
+        # fall through to being decoded + encoded fresh below.
+        bank_embedding_cache = {i["id"]: i["embedding"] for i in bank_items if "embedding" in i}
 
         top_image = Image.open(io.BytesIO(await file.read())).convert("RGB")
         top_embedding = model.encode(top_image)
@@ -418,24 +462,32 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
 
         # 1. Base match for pants - photo if the item has one, else its
         # text description. Items with neither just score 0 and rank last.
+        # Batched: every pants photo is decoded once and run through CLIP
+        # in a single call for the whole category, not one call per item.
         ranked_pants = []
         pants_emb_by_id = {}
-        for p in inventory.pants:
-            emb = get_item_embedding_for_matching(p)
+        pants_is_image_by_id = {}
+        pants_results = get_items_embeddings_for_matching(inventory.pants, bank_embedding_cache)
+        for p, (emb, is_image) in zip(inventory.pants, pants_results):
             pants_emb_by_id[p.id] = emb
+            pants_is_image_by_id[p.id] = is_image
             score = float(util.cos_sim(top_embedding, emb)) if emb is not None else 0.0
             ranked_pants.append({"id": p.id, "description": p.description, "match_score": score})
         ranked_pants.sort(key=lambda x: x["match_score"], reverse=True)
         pants_by_id = {p.id: p for p in inventory.pants}
         best_pants_item = pants_by_id[ranked_pants[0]["id"]] if ranked_pants else None
+        best_pants_emb = pants_emb_by_id.get(best_pants_item.id) if best_pants_item else None
+        best_pants_is_image = pants_is_image_by_id.get(best_pants_item.id, False) if best_pants_item else False
+        if best_pants_emb is None:
+            best_pants_emb = np.zeros(512)
 
-        # 2. Advanced match for shoes using your custom training files
+        # 2. Advanced match for shoes using your custom training files.
+        # Same batching - one CLIP call for every shoe photo in the
+        # category, which is what actually made a 64-item bank slow
+        # before (64 sequential single-image .encode() calls).
         ranked_shoes = []
-        for s in inventory.shoes:
-            shoe_emb = get_item_embedding_for_matching(s)
-            pants_emb = pants_emb_by_id.get(best_pants_item.id) if best_pants_item else None
-            if pants_emb is None:
-                pants_emb = np.zeros(512)
+        shoes_results = get_items_embeddings_for_matching(inventory.shoes, bank_embedding_cache)
+        for s, (shoe_emb, shoe_is_image) in zip(inventory.shoes, shoes_results):
             if shoe_emb is None:
                 # Nothing to embed this shoe with - baseline-only score of 0.
                 ranked_shoes.append({"id": s.id, "description": s.description, "match_score": 0.0})
@@ -446,9 +498,9 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
             # to be scored on that same zero-padded layout here - feeding it
             # a real pants embedding would be out-of-distribution input.
             # silhouette_model was trained with a real "bottom" embedding in
-            # that slot, so it gets the actual pants_emb.
+            # that slot, so it gets the actual best_pants_emb.
             color_vec = np.concatenate([top_embedding, np.zeros(512), shoe_emb, np.zeros(512)]).reshape(1, -1)
-            sil_vec = np.concatenate([top_embedding, pants_emb, shoe_emb, np.zeros(512)]).reshape(1, -1)
+            sil_vec = np.concatenate([top_embedding, best_pants_emb, shoe_emb, np.zeros(512)]).reshape(1, -1)
 
             # Combine scores from both custom brains
             score = float(util.cos_sim(top_embedding, shoe_emb))  # baseline
@@ -461,12 +513,11 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
             # /add-fit, so only apply it when the pants/shoes items in this
             # inventory carry a real photo too - otherwise skip it rather
             # than score a text embedding with an image-trained model.
-            if fit_clf:
-                pants_img_emb = get_item_image_embedding(best_pants_item)
-                shoe_img_emb = get_item_image_embedding(s)
-                if pants_img_emb is not None and shoe_img_emb is not None:
-                    fit_vec = np.concatenate([top_embedding, pants_img_emb, shoe_img_emb, np.zeros(512)]).reshape(1, -1)
-                    score += float(fit_clf.predict_proba(fit_vec)[0][1]) * 1.5
+            # Reuses the embeddings already computed above instead of
+            # re-decoding + re-encoding the same photos again.
+            if fit_clf and best_pants_is_image and shoe_is_image:
+                fit_vec = np.concatenate([top_embedding, best_pants_emb, shoe_emb, np.zeros(512)]).reshape(1, -1)
+                score += float(fit_clf.predict_proba(fit_vec)[0][1]) * 1.5
 
             ranked_shoes.append({"id": s.id, "description": s.description, "match_score": score})
 
