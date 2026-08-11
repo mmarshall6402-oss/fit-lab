@@ -83,6 +83,12 @@
   .hero-item .score { font-size: 12px; color: var(--accent); margin-top: 4px; }
   .hero-plus { display: flex; align-items: center; font-size: 24px; color: var(--muted); }
 
+  .rate-row { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .rate-row button { margin-top: 0; font-size: 15px; padding: 10px 22px; }
+  .rate-good { background: #1db954 !important; }
+  .rate-bad { background: #444 !important; }
+  .rate-row .hint { margin: 0; }
+
   /* Alternatives: secondary, smaller */
   .alternatives { margin-top: 24px; }
   .alternatives h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-weight: normal; }
@@ -158,6 +164,11 @@
 <div id="hero" class="panel">
   <div class="hero-title">Your Generated Outfit</div>
   <div class="hero-row" id="heroRow"></div>
+  <div class="rate-row">
+    <button type="button" class="rate-good" onclick="rateOutfit('good')">&#128077; Good Fit</button>
+    <button type="button" class="rate-bad" onclick="rateOutfit('bad')">&#128078; Bad Fit</button>
+    <div id="rateStatus" class="hint"></div>
+  </div>
 </div>
 
 <div class="alternatives" id="alternatives"></div>
@@ -205,6 +216,51 @@ function b64ToDataUrl(b64) {
 }
 
 let bankItemsByCategory = {};
+let lastGeneratedOutfit = null;
+
+function base64ToBlob(b64, mimeType) {
+  const bytes = atob(b64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mimeType });
+}
+
+async function rateOutfit(label) {
+  const rateStatusEl = document.getElementById("rateStatus");
+  const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
+  const apiKey = document.getElementById("apiKey").value.trim();
+
+  if (!apiKey) { rateStatusEl.textContent = "Enter your X-API-Key first."; return; }
+  if (!lastGeneratedOutfit) { rateStatusEl.textContent = "Generate an outfit first."; return; }
+
+  rateStatusEl.textContent = "Saving rating...";
+  try {
+    const form = new FormData();
+    form.append("top", lastGeneratedOutfit.topFile);
+    if (lastGeneratedOutfit.pantsBase64) {
+      form.append("bottom", base64ToBlob(lastGeneratedOutfit.pantsBase64, "image/jpeg"), "pants.jpg");
+    }
+    if (lastGeneratedOutfit.shoesBase64) {
+      form.append("shoes", base64ToBlob(lastGeneratedOutfit.shoesBase64, "image/jpeg"), "shoes.jpg");
+    }
+
+    const resp = await fetch(serverUrl + "/add-fit?label=" + label, {
+      method: "POST",
+      headers: { "X-API-Key": apiKey },
+      body: form,
+    });
+    const body = await resp.json();
+
+    if (!resp.ok) {
+      rateStatusEl.textContent = `Error ${resp.status}: ${body.detail || JSON.stringify(body)}`;
+      return;
+    }
+
+    rateStatusEl.textContent = `Saved as ${label.toUpperCase()} - ${body.engine_message} (total ratings: ${body.total_dataset_samples})`;
+  } catch (err) {
+    rateStatusEl.textContent = "Failed to save rating: " + err.message;
+  }
+}
 
 function pickDefaultCategory(categories, aliases) {
   const lowerToOriginal = {};
@@ -395,6 +451,15 @@ async function runMatch() {
     const rec = body.recommended_outfit || {};
     const bestPants = rec.best_pants_match && rec.best_pants_match[0];
     const bestShoes = rec.best_shoes_match && rec.best_shoes_match[0];
+
+    // Remembered so "Rate This Outfit" can submit exactly what's shown,
+    // without re-running the whole match or re-touching file inputs.
+    lastGeneratedOutfit = {
+      topFile,
+      pantsBase64: bestPants && pantsById[bestPants.id] ? pantsById[bestPants.id].image_base64 : null,
+      shoesBase64: bestShoes && shoesById[bestShoes.id] ? shoesById[bestShoes.id].image_base64 : null,
+    };
+    document.getElementById("rateStatus").textContent = "";
 
     const topReader = new FileReader();
     topReader.onload = () => {
