@@ -139,6 +139,14 @@ def train_fit_brain(X_memory, y_memory):
     this runs, never cached across requests, so a bulk-import script
     writing to the same files between /add-fit calls can't get clobbered
     by a stale in-memory copy."""
+    # Persist the raw ratings unconditionally, even before there's enough
+    # to actually fit a classifier - otherwise a single-class streak (e.g.
+    # several "good" ratings before the first "bad" one) gets silently
+    # dropped on every call and can never accumulate toward the 2-class
+    # minimum below.
+    with open(FIT_DATA_FILE, "wb") as f:
+        pickle.dump((X_memory, y_memory), f)
+
     if len(set(y_memory)) < 2:
         return "Data cached. Need at least 1 Good Fit AND 1 Bad Fit example to train the brain matrix."
 
@@ -171,8 +179,6 @@ def train_fit_brain(X_memory, y_memory):
     clf.fit(X, y)
     with open(FIT_MODEL_FILE, "wb") as f:
         pickle.dump(clf, f)
-    with open(FIT_DATA_FILE, "wb") as f:
-        pickle.dump((X_memory, y_memory), f)
     return f"Brain successfully updated and saved to fit_model.pkl!{holdout_note}"
 
 
@@ -304,6 +310,37 @@ async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Engine error: {str(e)}")
+
+
+def _read_json_if_exists(path):
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+@app.get("/stats", tags=["AI Style Training"])
+def get_stats(_: None = Depends(require_api_key)):
+    """How much data each of the three brains was actually trained on."""
+    fit_X, fit_y = load_fit_training_data()
+    fit_good = sum(fit_y)
+    fit_history = []
+    if os.path.exists(FIT_HISTORY_FILE):
+        with open(FIT_HISTORY_FILE) as f:
+            fit_history = [json.loads(line) for line in f if line.strip()]
+
+    return {
+        "fit_model": {
+            "trained": os.path.exists(FIT_MODEL_FILE),
+            "total_ratings": len(fit_y),
+            "good": fit_good,
+            "bad": len(fit_y) - fit_good,
+            "latest_holdout_accuracy": fit_history[-1]["holdout_accuracy"] if fit_history else None,
+            "holdout_checks_logged": len(fit_history),
+        },
+        "color_model": _read_json_if_exists("color_model_meta.json") or {"trained": os.path.exists("color_model.pkl"), "note": "meta file missing - rerun train_color_clash.py to record counts"},
+        "silhouette_model": _read_json_if_exists("silhouette_model_meta.json") or {"trained": os.path.exists("silhouette_model.pkl"), "note": "meta file missing - rerun train_silhouette.py to record counts"},
+    }
 
 
 @app.get("/docs", include_in_schema=False)

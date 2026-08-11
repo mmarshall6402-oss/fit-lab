@@ -1,5 +1,7 @@
+import json
 import numpy as np
 import pickle
+from datetime import datetime
 from sentence_transformers import SentenceTransformer
 from sklearn.linear_model import LogisticRegression
 
@@ -29,4 +31,13 @@ clf = LogisticRegression()
 clf.fit(np.array(X), np.array(y))
 with open("silhouette_model.pkl", "wb") as f:
     pickle.dump(clf, f)
-print("Successfully generated silhouette_model.pkl! Your server will now use this silhouette proportion logic.")
+
+with open("silhouette_model_meta.json", "w") as f:
+    json.dump({
+        "total_examples": len(y),
+        "good": sum(y),
+        "bad": len(y) - sum(y),
+        "trained_at": datetime.now().isoformat(),
+    }, f)
+
+print(f"Successfully generated silhouette_model.pkl from {len(y)} examples! Your server will now use this silhouette proportion logic.")

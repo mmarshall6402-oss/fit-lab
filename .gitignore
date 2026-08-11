@@ -8,3 +8,5 @@ fASHION-AI/*.pkl
 fASHION-AI/fit_model_backups/
 fASHION-AI/fit_training_history.jsonl
 fASHION-AI/catalog_*.json
+fASHION-AI/color_model_meta.json
+fASHION-AI/silhouette_model_meta.json
