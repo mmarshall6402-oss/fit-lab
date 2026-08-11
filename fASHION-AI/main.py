@@ -8,7 +8,7 @@ import shutil
 import numpy as np
 from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -232,7 +232,12 @@ async def add_fit(
 
 
 @app.post("/generate-outfit-from-top", tags=["Core Matching Engine"])
-async def generate_outfit_from_top(inventory_json: str, file: UploadFile = File(...), _: None = Depends(require_api_key)):
+async def generate_outfit_from_top(inventory_json: str = Form(...), file: UploadFile = File(...), _: None = Depends(require_api_key)):
+    # inventory_json is a Form field, not a query parameter - ClothingItem
+    # can carry a full base64-encoded photo now, and real photos are
+    # multiple MB, which blows past URL length limits every server
+    # enforces. Form fields ride in the multipart body instead, which has
+    # no such limit.
     try:
         data = json.loads(inventory_json)
         inventory = WardrobeInventory(**data)

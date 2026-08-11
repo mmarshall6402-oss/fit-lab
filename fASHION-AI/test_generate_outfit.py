@@ -14,6 +14,7 @@ real photos - reusing outfit photos as stand-in "shoes" is fine for
 that, but for a real inventory you'd want actual individual item photos
 (see build_catalog.py).
 """
+import io
 import sys
 import os
 import json
@@ -25,11 +26,28 @@ try:
 except ImportError:
     raise SystemExit("Missing dependency - run: pip install requests")
 
+from PIL import Image
+
 API_KEY = os.environ.get("FASHION_AI_API_KEY")
 if not API_KEY:
     raise SystemExit("Set FASHION_AI_API_KEY in this terminal first (same key your running server is using).")
 
 BASE_URL = "http://127.0.0.1:8000"
+
+# CLIP resizes every image internally anyway (to ~224x224), so a full-size
+# camera photo (often several MB) adds nothing but bloat - and inventory_json
+# is a Form field, which Starlette hard-caps at 1MB with no override exposed
+# through FastAPI's public API. Shrinking client-side avoids hitting that
+# cap instead of silently 400ing on real photos.
+MAX_DIMENSION = 768
+
+
+def shrink_and_encode(path: Path) -> str:
+    img = Image.open(path).convert("RGB")
+    img.thumbnail((MAX_DIMENSION, MAX_DIMENSION))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def main():
@@ -41,18 +59,21 @@ def main():
 
     inventory = {
         "shoes": [
-            {"id": i + 1, "description": p.stem, "image_base64": base64.b64encode(p.read_bytes()).decode("ascii")}
+            {"id": i + 1, "description": p.stem, "image_base64": shrink_and_encode(p)}
             for i, p in enumerate(shoe_paths)
         ]
     }
 
-    with open(top_path, "rb") as f:
-        resp = requests.post(
-            f"{BASE_URL}/generate-outfit-from-top",
-            params={"inventory_json": json.dumps(inventory)},
-            files={"file": (top_path.name, f, "image/jpeg")},
-            headers={"X-API-Key": API_KEY},
-        )
+    top_buf = io.BytesIO()
+    Image.open(top_path).convert("RGB").save(top_buf, format="JPEG", quality=90)
+    top_buf.seek(0)
+
+    resp = requests.post(
+        f"{BASE_URL}/generate-outfit-from-top",
+        data={"inventory_json": json.dumps(inventory)},
+        files={"file": (top_path.name, top_buf, "image/jpeg")},
+        headers={"X-API-Key": API_KEY},
+    )
 
     print(resp.status_code)
     print(json.dumps(resp.json(), indent=2))

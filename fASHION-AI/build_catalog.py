@@ -32,6 +32,7 @@ description is just the cleaned-up filename - a starting point, not
 meant to be perfect. Rename files beforehand for better descriptions, or
 edit the JSON after.
 """
+import io
 import sys
 import json
 import base64
@@ -39,8 +40,24 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
+from PIL import Image
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+# CLIP resizes every image internally anyway (to ~224x224), so a full-size
+# camera photo (often several MB) adds nothing but bloat - and this JSON
+# ends up pasted into inventory_json, a Form field Starlette hard-caps at
+# 1MB with no override exposed through FastAPI's public API. Shrinking here
+# avoids hitting that cap later instead of silently 400ing on real photos.
+MAX_DIMENSION = 768
+
+
+def shrink_and_encode(path: Path) -> str:
+    img = Image.open(path).convert("RGB")
+    img.thumbnail((MAX_DIMENSION, MAX_DIMENSION))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def resolve_root(path_arg):
@@ -79,7 +96,7 @@ def main():
         for f in sorted(cat_dir.iterdir()):
             if f.suffix.lower() not in IMAGE_EXTS:
                 continue
-            img_b64 = base64.b64encode(f.read_bytes()).decode("ascii")
+            img_b64 = shrink_and_encode(f)
             items.append({
                 "id": next_id,
                 "description": describe_from_filename(f),
