@@ -29,7 +29,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["POST"],
+    allow_methods=["POST", "GET"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
 
