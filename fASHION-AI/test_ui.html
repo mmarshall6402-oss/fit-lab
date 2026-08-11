@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FIT//LAB - Local Test UI</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --panel: #161616;
+    --border: #2a2a2a;
+    --accent: #ff0055;
+    --text: #f2f2f2;
+    --muted: #999;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 {
+    color: var(--accent);
+    letter-spacing: 1px;
+    font-size: 20px;
+    margin: 0 0 20px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  label:first-child { margin-top: 0; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  input[type=file] { font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 220px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 16px;
+    font-size: 14px;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { margin-top: 10px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+  .results { display: flex; gap: 24px; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 280px; }
+  .col h2 { font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+  .card {
+    display: flex;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+  .card.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; background: #000; }
+  .card .meta { flex: 1; }
+  .card .desc { font-size: 13px; }
+  .card .score { font-size: 12px; color: var(--muted); }
+  .badge {
+    font-size: 10px;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+  }
+  #topPreview { max-width: 160px; max-height: 160px; border-radius: 8px; margin-top: 8px; display: none; }
+</style>
+</head>
+<body>
+
+<h1>&#9889; FIT//LAB Local Test UI</h1>
+
+<div class="panel">
+  <div class="row">
+    <div>
+      <label>Server URL</label>
+      <input type="text" id="serverUrl" value="http://127.0.0.1:8000">
+    </div>
+    <div>
+      <label>X-API-Key</label>
+      <input type="password" id="apiKey" placeholder="paste your FASHION_AI_API_KEY">
+    </div>
+  </div>
+
+  <label>Top photo (the base item)</label>
+  <input type="file" id="topFile" accept="image/*">
+  <img id="topPreview">
+
+  <label>Candidate pants photos (optional, multiple)</label>
+  <input type="file" id="pantsFiles" accept="image/*" multiple>
+
+  <label>Candidate shoes photos (optional, multiple)</label>
+  <input type="file" id="shoesFiles" accept="image/*" multiple>
+
+  <button id="submitBtn" onclick="runMatch()">Rank This Outfit</button>
+  <div id="status"></div>
+</div>
+
+<div class="results" id="results"></div>
+
+<script>
+const MAX_DIMENSION = 768;
+
+// CLIP resizes every image internally anyway, and inventory_json is a
+// Form field Starlette hard-caps at 1MB with no override - shrinking
+// client-side (mirrors build_catalog.py / test_generate_outfit.py)
+// keeps real camera photos under that cap.
+function shrinkToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > height && width > MAX_DIMENSION) {
+        height = Math.round(height * (MAX_DIMENSION / width));
+        width = MAX_DIMENSION;
+      } else if (height > MAX_DIMENSION) {
+        width = Math.round(width * (MAX_DIMENSION / height));
+        height = MAX_DIMENSION;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      resolve(dataUrl.split(",")[1]);
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function filenameToDescription(name) {
+  return name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+}
+
+async function buildItems(fileList) {
+  const files = Array.from(fileList);
+  const items = [];
+  for (let i = 0; i < files.length; i++) {
+    items.push({
+      id: i + 1,
+      description: filenameToDescription(files[i].name),
+      image_base64: await shrinkToBase64(files[i]),
+      _previewUrl: URL.createObjectURL(files[i]),
+    });
+  }
+  return items;
+}
+
+function renderColumn(title, items, ranked) {
+  const col = document.createElement("div");
+  col.className = "col";
+  const h2 = document.createElement("h2");
+  h2.textContent = title;
+  col.appendChild(h2);
+
+  if (!ranked || ranked.length === 0) {
+    const p = document.createElement("div");
+    p.style.color = "var(--muted)";
+    p.style.fontSize = "13px";
+    p.textContent = "No candidates provided.";
+    col.appendChild(p);
+    return col;
+  }
+
+  const byId = {};
+  items.forEach(it => byId[it.id] = it);
+
+  ranked.forEach((r, idx) => {
+    const card = document.createElement("div");
+    card.className = "card" + (idx === 0 ? " best" : "");
+    const img = document.createElement("img");
+    img.src = byId[r.id] ? byId[r.id]._previewUrl : "";
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.innerHTML =
+      `<div class="desc">${r.description || "(no description)"}${idx === 0 ? '<span class="badge">BEST MATCH</span>' : ""}</div>` +
+      `<div class="score">score: ${r.match_score.toFixed(3)}</div>`;
+    card.appendChild(img);
+    card.appendChild(meta);
+    col.appendChild(card);
+  });
+
+  return col;
+}
+
+async function runMatch() {
+  const statusEl = document.getElementById("status");
+  const resultsEl = document.getElementById("results");
+  const btn = document.getElementById("submitBtn");
+  resultsEl.innerHTML = "";
+
+  const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const topFile = document.getElementById("topFile").files[0];
+  const pantsFiles = document.getElementById("pantsFiles").files;
+  const shoesFiles = document.getElementById("shoesFiles").files;
+
+  if (!apiKey) { statusEl.textContent = "Enter your X-API-Key first."; return; }
+  if (!topFile) { statusEl.textContent = "Pick a top photo first."; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = "Encoding images...";
+
+  try {
+    const pantsItems = await buildItems(pantsFiles);
+    const shoesItems = await buildItems(shoesFiles);
+
+    const inventory = {
+      pants: pantsItems.map(({ _previewUrl, ...rest }) => rest),
+      shoes: shoesItems.map(({ _previewUrl, ...rest }) => rest),
+    };
+
+    statusEl.textContent = "Sending to " + serverUrl + " ...";
+
+    const form = new FormData();
+    form.append("inventory_json", JSON.stringify(inventory));
+    form.append("file", topFile);
+
+    const resp = await fetch(serverUrl + "/generate-outfit-from-top", {
+      method: "POST",
+      headers: { "X-API-Key": apiKey },
+      body: form,
+    });
+
+    const body = await resp.json();
+
+    if (!resp.ok) {
+      statusEl.textContent = `Error ${resp.status}: ${body.detail || JSON.stringify(body)}`;
+      btn.disabled = false;
+      return;
+    }
+
+    statusEl.textContent = `OK (${resp.status})`;
+
+    const rec = body.recommended_outfit || {};
+    resultsEl.appendChild(renderColumn("Pants", pantsItems, rec.best_pants_match));
+    resultsEl.appendChild(renderColumn("Shoes", shoesItems, rec.best_shoes_match));
+  } catch (err) {
+    statusEl.textContent = "Request failed: " + err.message + "\n(Check the server is running, and that ALLOWED_ORIGINS includes the origin this page is served from - see instructions.)";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("topFile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  const preview = document.getElementById("topPreview");
+  if (file) {
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+  } else {
+    preview.style.display = "none";
+  }
+});
+</script>
+
+</body>
+</html>
