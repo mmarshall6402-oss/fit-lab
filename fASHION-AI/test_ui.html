@@ -299,13 +299,14 @@ async function loadBank() {
     ).join("");
     pantsSelect.innerHTML = options;
     shoesSelect.innerHTML = options;
-    // Auto-pick a sensible default category per slot, matching common
-    // names rather than requiring the category to literally be called
-    // "pants"/"shoes" - e.g. a bulk-uploaded "sneakers" folder should
-    // default into the shoes slot without the user hunting for it.
-    const defaultPants = pickDefaultCategory(body.categories, ["pants", "bottoms", "bottom", "jeans", "trousers"]);
+    // Auto-pick a sensible default shoes category, matching common names
+    // rather than requiring the category to literally be called "shoes"
+    // - e.g. a bulk-uploaded "sneakers" folder should default into the
+    // shoes slot without the user hunting for it. Pants stays on "(none)"
+    // by default - top+shoes matching is the current focus, pants can
+    // still be turned on manually any time via the dropdown, nothing
+    // about that path was removed.
     const defaultShoes = pickDefaultCategory(body.categories, ["shoes", "sneakers", "kicks", "footwear"]);
-    if (defaultPants) pantsSelect.value = defaultPants;
     if (defaultShoes) shoesSelect.value = defaultShoes;
 
     statusEl.textContent = `Loaded ${body.count} items across ${body.categories.length} categories: ${body.categories.join(", ") || "(bank is empty)"}`;

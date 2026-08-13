@@ -13,12 +13,15 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Hea
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.cluster import KMeans
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer, util
-from PIL import Image
+from sentence_transformers import SentenceTransformer
+from PIL import Image, ImageOps
+import torch
+from transformers import SegformerImageProcessor, AutoModelForSemanticSegmentation
 
 app = FastAPI(title="⚡ FIT//LAB AI Engine", docs_url=None, redoc_url=None)
 
@@ -43,6 +46,140 @@ def require_api_key(x_api_key: str = Header(default=None)):
         raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key")
 
 model = SentenceTransformer('clip-ViT-B-32')
+
+# Clothes-parsing model: CLIP has no notion of "this pixel region is the
+# shirt vs. the background vs. the shoes" - it just embeds a whole photo
+# holistically. For single_full_fit_image uploads (a real head-to-toe
+# outfit photo, not an individually-cropped item), this segmentation
+# model finds the actual garment regions so each one can be cropped and
+# CLIP-encoded on its own, instead of the whole scene (person, background,
+# every garment at once) getting duplicated into all four inventory slots.
+GARMENT_SEG_MODEL = "mattmdjaga/segformer_b2_clothes"
+_seg_processor = SegformerImageProcessor.from_pretrained(GARMENT_SEG_MODEL)
+_seg_model = AutoModelForSemanticSegmentation.from_pretrained(GARMENT_SEG_MODEL)
+_seg_model.eval()
+_seg_label2id = {name.lower(): idx for idx, name in _seg_model.config.id2label.items()}
+# Only labels we have an inventory slot for - Hat/Hair/Face/Bag/etc are
+# real segments this model finds but nothing in WardrobeInventory maps to
+# them, so they're left alone (background as far as this app is concerned).
+GARMENT_LABEL_GROUPS = {
+    "top": ["upper-clothes", "dress"],
+    "pants": ["pants", "skirt"],
+    "shoes": ["left-shoe", "right-shoe"],
+}
+
+def _segment_pixel_labels(img: Image.Image) -> np.ndarray:
+    """Per-pixel label id for every pixel in img, upsampled back to img's
+    original resolution (the model itself runs at a fixed internal size)."""
+    inputs = _seg_processor(images=img, return_tensors="pt")
+    with torch.no_grad():
+        logits = _seg_model(**inputs).logits
+    upsampled = torch.nn.functional.interpolate(logits, size=img.size[::-1], mode="bilinear", align_corners=False)
+    return upsampled.argmax(dim=1)[0].numpy()
+
+def _crop_to_labels(img: Image.Image, pixel_labels: np.ndarray, label_names: list, pad_frac: float = 0.04):
+    """Isolates every pixel matching any of label_names and crops to its
+    bounding box, or None if that garment wasn't found in this photo at
+    all. A bounding box alone isn't enough - e.g. arms folded across a
+    torso mean the "pants" box can still overlap the "upper-clothes" box,
+    so pixels outside the mask (other garments, skin, background) get
+    painted out to a neutral white first. Without this, a "pants" crop
+    could still show a chunk of shirt or hand inside its box, which
+    contaminates both the embedding and what shows up in the UI as "the
+    pants" - each garment's check should only ever see that garment."""
+    ids = [_seg_label2id[n] for n in label_names if n in _seg_label2id]
+    mask = np.isin(pixel_labels, ids)
+    if not mask.any():
+        return None
+    ys, xs = np.where(mask)
+    y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    h, w = pixel_labels.shape
+    pad_y, pad_x = int((y1 - y0) * pad_frac), int((x1 - x0) * pad_frac)
+    y0, y1 = max(0, y0 - pad_y), min(h - 1, y1 + pad_y)
+    x0, x1 = max(0, x0 - pad_x), min(w - 1, x1 + pad_x)
+
+    isolated = np.array(img).copy()
+    isolated[~mask] = 255  # neutral fill outside this garment's own pixels
+    return Image.fromarray(isolated).crop((int(x0), int(y0), int(x1) + 1, int(y1) + 1))
+
+def detect_garments(img: Image.Image) -> dict:
+    """Returns {"top": PIL.Image|None, "pants": PIL.Image|None, "shoes":
+    PIL.Image|None} - a cropped photo of each garment this model actually
+    found in img, or None for anything it didn't (out of frame, occluded,
+    not present)."""
+    pixel_labels = _segment_pixel_labels(img)
+    return {slot: _crop_to_labels(img, pixel_labels, names) for slot, names in GARMENT_LABEL_GROUPS.items()}
+
+def crop_to_garment(img: Image.Image, category: str) -> Image.Image:
+    """Crops img down to just the `category` garment region (e.g. isolates
+    the shoes out of a full scene) so backgrounds, other garments, and the
+    person wearing them don't leak into that item's embedding. Falls back
+    to the original photo unchanged when category isn't one this model
+    detects (outerwear, accessories, ...), or when nothing was found in
+    this particular photo - which is also the correct behavior for an
+    already-isolated product shot (no person to parse means nothing to
+    crop to, and the original photo is already the right crop)."""
+    label_names = GARMENT_LABEL_GROUPS.get(category.lower())
+    if not label_names:
+        return img
+    pixel_labels = _segment_pixel_labels(img)
+    crop = _crop_to_labels(img, pixel_labels, label_names)
+    return crop if crop is not None else img
+
+COLOR_PALETTE_SIZE = 3  # dominant colors kept per garment
+
+def color_palette(img: Image.Image, k: int = COLOR_PALETTE_SIZE) -> list:
+    """The k most common colors in img's real pixels, each with its share
+    of the garment (weights sum to 1) - a richer color-match signal than
+    a single average. A shirt that's mostly black fabric with a small
+    colorful graphic averages out to "black", silently throwing away
+    exactly the accent colors (gold/green/red text, say) that actually
+    matter for judging a "detailed" match - a plain mean can't represent
+    "mostly black, with some green and gold" at all. k-means clustering on
+    the real pixel colors keeps that whole palette, weighted by how much
+    of the garment each color actually covers, instead of collapsing it
+    to one blended color no real color in the photo may even resemble.
+
+    _crop_to_labels fills every non-garment pixel with exact pure white
+    (255,255,255); real photographed pixels - even on a genuinely white
+    garment - essentially never land there, so a simple equality check
+    reliably tells "real garment pixel" from "background fill" without
+    needing the original segmentation mask passed in here."""
+    arr = np.array(img).reshape(-1, 3).astype(np.float32)
+    real_pixels = arr[~np.all(arr >= 254, axis=1)]
+    if len(real_pixels) == 0:
+        real_pixels = arr  # fully white garment, or an uncropped photo
+
+    k_eff = min(k, len(np.unique(real_pixels, axis=0)))
+    if k_eff <= 1:
+        return [{"color": real_pixels.mean(axis=0).tolist(), "weight": 1.0}]
+
+    labels = KMeans(n_clusters=k_eff, n_init=3, random_state=0).fit(real_pixels)
+    counts = np.bincount(labels.labels_, minlength=k_eff)
+    weights = counts / counts.sum()
+    order = np.argsort(-weights)
+    return [{"color": labels.cluster_centers_[i].tolist(), "weight": float(weights[i])} for i in order]
+
+def _rgb_similarity(color_a: list, color_b: list) -> float:
+    """0-1 score, 1 = identical color. Euclidean distance in plain RGB is a
+    crude perceptual metric but is more than enough to tell "black" from
+    "white" from "green" - the actual failure mode being fixed here, not
+    fine-grained color science."""
+    dist = float(np.linalg.norm(np.array(color_a) - np.array(color_b)))
+    return 1.0 - (dist / 441.673)  # 441.673 = sqrt(3 * 255^2), max possible RGB distance
+
+def palette_similarity(palette_a: list, palette_b: list) -> float:
+    """Weighted best-match between two color palettes: each color in A is
+    matched to whichever color in B is closest, weighted by how much of
+    garment A that color actually covers, then symmetrized so a match
+    counts however either side is queried from. A green shoe should score
+    well against a mostly-black top that has a green accent - a single-
+    average comparison could only ever say "not black enough"; matching
+    per-color lets the shared green earn credit while black-vs-green
+    elsewhere in the palette still costs it."""
+    def best_match_score(pa, pb):
+        return sum(c_a["weight"] * max(_rgb_similarity(c_a["color"], c_b["color"]) for c_b in pb) for c_a in pa)
+    return (best_match_score(palette_a, palette_b) + best_match_score(palette_b, palette_a)) / 2
 
 # Data Structures for incoming inventory. An item can be identified by a
 # photo, a text description, or both - only id is actually required.
@@ -82,6 +219,18 @@ ITEM_BANK_FILE = "item_bank.json"
 BANK_MAX_DIMENSION = 768
 BANK_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
+def open_image(raw_bytes: bytes) -> Image.Image:
+    """PIL.Image.open() ignores EXIF orientation - most phone cameras
+    save pixels in the sensor's native (often landscape) orientation and
+    rely on an EXIF Orientation tag for viewers to rotate on display, so
+    every normal viewer shows the photo upright but PIL would process it
+    exactly as stored, sideways. That silently fed sideways pixels into
+    every embedding and, once crop_to_garment started drawing tight boxes
+    around specific garments instead of using the whole photo, turned into
+    visibly rotated crops. exif_transpose bakes the intended rotation into
+    the pixels once, up front, before anything downstream touches them."""
+    return ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGB")
+
 def load_item_bank():
     if os.path.exists(ITEM_BANK_FILE):
         with open(ITEM_BANK_FILE) as f:
@@ -96,17 +245,18 @@ def describe_from_filename(filename: str) -> str:
     stem = os.path.splitext(filename)[0].replace("_", " ").replace("-", " ")
     return " ".join(stem.split())
 
-def process_image_for_bank(raw: bytes):
-    """Shrinks + JPEG-encodes the photo for storage (CLIP resizes every
-    image internally anyway (~224x224), so a full camera photo is wasted
-    bloat - and this can end up embedded in inventory_json, a Form field
-    Starlette hard-caps at 1MB), AND computes its CLIP embedding once
-    here at upload time. Caching the embedding on the bank item means
-    /generate-outfit-from-top can look it up instead of re-decoding and
-    re-running CLIP on the same unchanged photo on every single request -
-    with a bank of dozens of items, that repeated re-encoding was the
-    entire cost of the endpoint."""
-    img = Image.open(io.BytesIO(raw)).convert("RGB")
+def _encode_and_shrink_for_bank(img: Image.Image):
+    """Shrinks + JPEG-encodes img for storage (CLIP resizes every image
+    internally anyway (~224x224), so a full camera photo is wasted bloat -
+    and this can end up embedded in inventory_json, a Form field Starlette
+    hard-caps at 1MB), AND computes its CLIP embedding once here at upload
+    time. Caching the embedding on the bank item means /generate-outfit-
+    from-top can look it up instead of re-decoding and re-running CLIP on
+    the same unchanged photo on every single request - with a bank of
+    dozens of items, that repeated re-encoding was the entire cost of the
+    endpoint. img should already be cropped to the relevant garment (see
+    crop_to_garment) - this step only handles storage sizing + encoding."""
+    img = img.copy()
     img.thumbnail((BANK_MAX_DIMENSION, BANK_MAX_DIMENSION))
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
@@ -114,25 +264,90 @@ def process_image_for_bank(raw: bytes):
     embedding = model.encode(img).tolist()
     return b64, embedding
 
-def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str, label: Optional[str] = None) -> int:
-    """label is the good/bad rating of the OUTFIT this photo came from
-    (via /add-fit), not a judgment on the item itself in isolation - a
-    zip upload has no rating context, so it stays None (unrated)."""
-    items = load_item_bank()
+BANK_DEDUP_THRESHOLD = 0.999  # cosine similarity above which two photos in the
+# same category are treated as the same physical item, not two different ones.
+
+def _find_duplicate_item(items: list, category: str, embedding: list):
+    """Same physical item photographed/uploaded more than once (most often
+    the same shoe or pants re-submitted across several /add-fit ratings)
+    shouldn't turn into separate bank entries - every rating still trains
+    fit_model.pkl on its own outfit_vector regardless, this only stops the
+    browsable pool (and resolve_candidates' match options) from filling up
+    with near-identical clones of one real item."""
+    candidate = np.array(embedding, dtype=np.float32)
+    candidate_norm = np.linalg.norm(candidate)
+    if candidate_norm == 0:
+        return None
+    for item in items:
+        if item["category"].lower() != category.lower() or "embedding" not in item:
+            continue
+        existing = np.array(item["embedding"], dtype=np.float32)
+        existing_norm = np.linalg.norm(existing)
+        if existing_norm == 0:
+            continue
+        sim = float(candidate @ existing) / (candidate_norm * existing_norm)
+        if sim >= BANK_DEDUP_THRESHOLD:
+            return item
+    return None
+
+# Common synonyms for the same slot get folded into one canonical bank
+# category at upload time - mirrors test_ui.html's pickDefaultCategory
+# alias list, so a zip folder named "sneakers" or "kicks" lands in the
+# same place a "shoes" folder would, instead of splintering into a
+# separate category that has to be merged by hand afterward.
+CATEGORY_ALIASES = {
+    "sneakers": "shoes", "kicks": "shoes", "footwear": "shoes", "trainers": "shoes",
+    "bottoms": "pants", "bottom": "pants", "jeans": "pants", "trousers": "pants", "shorts": "pants",
+}
+
+def normalize_category(category: str) -> str:
+    return CATEGORY_ALIASES.get(category.strip().lower(), category.strip())
+
+def _store_bank_item(items: list, category: str, description: str, img: Image.Image, source: str, label: Optional[str]) -> tuple:
+    """Shared tail end of add_bank_item and the single_full_fit_image path
+    in /add-fit: both need dedup-and-append against an already-loaded
+    items list, but single_full_fit_image already has its per-garment crop
+    from detect_garments and shouldn't pay for a second segmentation pass
+    on what's already an isolated crop. Returns (id, is_new, embedding);
+    does NOT save to disk - the caller does that once after all items in
+    a batch are added, instead of once per item."""
+    image_b64, embedding = _encode_and_shrink_for_bank(img)
+    palette = color_palette(img)
+
+    duplicate = _find_duplicate_item(items, category, embedding)
+    if duplicate is not None:
+        if label is not None:
+            duplicate["label"] = label
+        return duplicate["id"], False, embedding, palette
+
     next_id = max((i["id"] for i in items), default=0) + 1
-    image_b64, embedding = process_image_for_bank(raw_bytes)
     items.append({
         "id": next_id,
         "category": category,
         "description": description,
         "image_base64": image_b64,
         "embedding": embedding,
+        "palette": palette,
         "source": source,
         "label": label,
         "added_at": datetime.now().isoformat(),
     })
+    return next_id, True, embedding, palette
+
+def add_bank_item(category: str, description: str, raw_bytes: bytes, source: str, label: Optional[str] = None) -> tuple:
+    """Returns (id, is_new, embedding, palette) - is_new is False when this
+    photo matched an existing bank item closely enough to be merged into
+    it instead. label is the good/bad rating of the OUTFIT this photo
+    came from (via /add-fit), not a judgment on the item itself in
+    isolation - a zip upload has no rating context, so it stays None
+    (unrated)."""
+    category = normalize_category(category)
+    items = load_item_bank()
+    img = open_image(raw_bytes)
+    img = crop_to_garment(img, category)
+    result = _store_bank_item(items, category, description, img, source, label)
     save_item_bank(items)
-    return next_id
+    return result
 
 
 @app.post("/bank/upload-zip", tags=["Item Bank"])
@@ -153,18 +368,20 @@ async def upload_bank_zip(zip_file: UploadFile = File(...), _: None = Depends(re
         raise HTTPException(status_code=400, detail="Not a valid zip file")
 
     added_by_category: dict[str, int] = {}
+    duplicates_skipped = 0
+    processed = 0
     for name in zf.namelist():
         if name.endswith("/") or "__MACOSX" in name:
             continue
         parts = name.split("/")
         if len(parts) < 2:
             continue  # not inside a category subfolder, skip
-        category = parts[0]
+        category = normalize_category(parts[0])
         filename = parts[-1]
         if os.path.splitext(filename)[1].lower() not in BANK_IMAGE_EXTS:
             continue
         try:
-            add_bank_item(
+            _, is_new, _, _ = add_bank_item(
                 category=category,
                 description=describe_from_filename(filename),
                 raw_bytes=zf.read(name),
@@ -172,12 +389,16 @@ async def upload_bank_zip(zip_file: UploadFile = File(...), _: None = Depends(re
             )
         except Exception:
             continue  # skip unreadable files rather than failing the whole batch
-        added_by_category[category] = added_by_category.get(category, 0) + 1
+        processed += 1
+        if is_new:
+            added_by_category[category] = added_by_category.get(category, 0) + 1
+        else:
+            duplicates_skipped += 1
 
-    if not added_by_category:
+    if processed == 0:
         raise HTTPException(status_code=400, detail="No images found inside category subfolders (e.g. sneakers/, shirts/).")
 
-    return {"added": added_by_category, "total_bank_size": len(load_item_bank())}
+    return {"added": added_by_category, "duplicates_skipped": duplicates_skipped, "total_bank_size": len(load_item_bank())}
 
 
 @app.get("/bank", tags=["Item Bank"])
@@ -242,7 +463,7 @@ def get_image_embedding(file: Optional[UploadFile]):
     if not file or not file.filename:
         return np.zeros(512, dtype=np.float32)
     try:
-        img = Image.open(io.BytesIO(file.file.read())).convert("RGB")
+        img = open_image(file.file.read())
         return model.encode(img)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
@@ -250,20 +471,24 @@ def get_image_embedding(file: Optional[UploadFile]):
 def get_image_embedding_and_bank(file: Optional[UploadFile], category: str, label: Optional[str] = None):
     """Same as get_image_embedding, but also adds the photo to the item
     bank under the given category - used for /add-fit's separate item
-    slots (top/bottom/shoes/outerwear), which are genuine single-item
-    photos, unlike single_full_fit_image (a whole-body photo). label is
-    the good/bad rating the outfit this photo was part of received."""
+    slots (top/bottom/shoes/outerwear). add_bank_item crops the photo down
+    to just that garment first (see crop_to_garment), so a background or
+    the rest of an outfit sneaking into frame doesn't leak into the
+    embedding - the returned embedding is exactly what got stored, so
+    fit_model.pkl trains on the same signal /generate-outfit-from-top
+    later matches against. label is the good/bad rating the outfit this
+    photo was part of received."""
     if not file or not file.filename:
         return np.zeros(512, dtype=np.float32)
     raw = file.file.read()
     try:
-        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        open_image(raw)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image {file.filename}: {str(e)}")
-    add_bank_item(category=category, description=describe_from_filename(file.filename), raw_bytes=raw, source="training_data", label=label)
-    return model.encode(img)
+    _, _, embedding, _ = add_bank_item(category=category, description=describe_from_filename(file.filename), raw_bytes=raw, source="training_data", label=label)
+    return np.array(embedding, dtype=np.float32)
 
-def get_items_embeddings_for_matching(items: List[ClothingItem], embedding_cache: Optional[dict] = None):
+def get_items_embeddings_for_matching(items: List[ClothingItem], garment_slot: str, embedding_cache: Optional[dict] = None, palette_cache: Optional[dict] = None):
     """Batch version of the old per-item encode: decodes every item's
     photo (or falls back to its text description) up front, then runs
     CLIP exactly once per modality - all images together, all
@@ -272,31 +497,40 @@ def get_items_embeddings_for_matching(items: List[ClothingItem], embedding_cache
     calls (CLIP has real fixed overhead per call, especially on CPU),
     which matters a lot once a bank category has dozens of items.
 
-    embedding_cache maps item id -> precomputed embedding (list of
-    floats, as stored on bank items - see process_image_for_bank). Bank
-    items hit this cache and skip decode+encode entirely, which is what
-    makes repeat requests against a large bank fast - only genuinely new
-    (non-bank) items need to be encoded here at all.
+    embedding_cache/palette_cache map item id -> precomputed embedding/
+    color palette (as stored on bank items - see _encode_and_shrink_for_
+    bank and color_palette). Bank items hit these caches and skip decode+
+    encode (and the crop below) entirely, since they were already cropped
+    once at upload time - only genuinely new (non-bank, manually-attached)
+    items get cropped and encoded here. garment_slot ("pants" or "shoes")
+    tells crop_to_garment which region of a manually-attached photo
+    actually matters.
 
-    Returns a list of (embedding_or_None, is_image), same order as
-    `items`. is_image tells the caller whether that embedding is safe to
-    reuse for fit_clf (image-trained) without re-encoding."""
+    Returns a list of (embedding_or_None, is_image, palette_or_None), same
+    order as `items`. is_image tells the caller whether that embedding is
+    safe to reuse for fit_clf (image-trained) without re-encoding; palette
+    is None for text-only items (nothing to read a color off of)."""
     embedding_cache = embedding_cache or {}
+    palette_cache = palette_cache or {}
     results = [None] * len(items)
+    palettes = [None] * len(items)
     image_indices, images = [], []
     text_indices, texts = [], []
 
     for idx, item in enumerate(items):
         if item and item.id in embedding_cache:
             results[idx] = (np.array(embedding_cache[item.id], dtype=np.float32), True)
+            palettes[idx] = palette_cache.get(item.id)
         elif item and item.image_base64:
             try:
                 img_bytes = base64.b64decode(item.image_base64)
-                img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                img = open_image(img_bytes)
+                img = crop_to_garment(img, garment_slot)
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to decode image for item {item.id}: {str(e)}")
             image_indices.append(idx)
             images.append(img)
+            palettes[idx] = color_palette(img)
         elif item and item.description:
             text_indices.append(idx)
             texts.append(item.description)
@@ -311,7 +545,7 @@ def get_items_embeddings_for_matching(items: List[ClothingItem], embedding_cache
         for i, idx in enumerate(text_indices):
             results[idx] = (text_embs[i], False)
 
-    return [r if r is not None else (None, False) for r in results]
+    return [((results[i] or (None, False))[0], (results[i] or (None, False))[1], palettes[i]) for i in range(len(items))]
 
 def _log_training_history(n_samples, holdout_accuracy):
     entry = {
@@ -398,6 +632,11 @@ async def add_fit(
     Upload any combination of a full-fit photo, top, bottom, shoes, and
     outerwear - just at least one image. Missing slots are zero-padded.
     This is independent of the curated color/silhouette scripts.
+
+    A full-fit photo gets run through garment segmentation to find the
+    actual top/pants/shoes regions in the scene, crop each one out, and
+    bank + embed them individually - same as if you'd uploaded three
+    separate cropped photos to top/bottom/shoes yourself, just automatic.
     """
     label_clean = label.strip().lower()
     if label_clean not in ["good", "bad"]:
@@ -407,11 +646,41 @@ async def add_fit(
     if not provided:
         raise HTTPException(status_code=400, detail="Provide at least one image: a full-fit photo, or any of top/bottom/shoes/outerwear.")
 
+    detected_regions = None
     if single_full_fit_image and single_full_fit_image.filename:
-        # A whole-body photo, not a single item - doesn't belong in the
-        # item bank alongside individual sneaker/shirt/etc. photos.
-        fit_emb = get_image_embedding(single_full_fit_image)
-        outfit_vector = np.concatenate([fit_emb, fit_emb, fit_emb, fit_emb])
+        raw = single_full_fit_image.file.read()
+        try:
+            fit_img = open_image(raw)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to process image {single_full_fit_image.filename}: {str(e)}")
+
+        crops = detect_garments(fit_img)
+        detected_regions = {slot: crop is not None for slot, crop in crops.items()}
+
+        if not any(crops.values()):
+            # Segmentation didn't find a person wearing clothes in this
+            # photo at all - fall back to the old whole-photo-in-every-
+            # slot behavior rather than training on an all-zero vector.
+            fit_emb = model.encode(fit_img)
+            outfit_vector = np.concatenate([fit_emb, fit_emb, fit_emb, fit_emb])
+        else:
+            bank_items = load_item_bank()
+
+            def _embed_detected_slot(crop, category):
+                if crop is None:
+                    return np.zeros(512, dtype=np.float32)
+                _, _, embedding, _ = _store_bank_item(
+                    bank_items, category, f"{category} detected from full-fit photo",
+                    crop, "full_fit_detection", label_clean,
+                )
+                return np.array(embedding, dtype=np.float32)
+
+            top_emb = _embed_detected_slot(crops["top"], "top")
+            bottom_emb = _embed_detected_slot(crops["pants"], "pants")
+            shoes_emb = _embed_detected_slot(crops["shoes"], "shoes")
+            outerwear_emb = np.zeros(512, dtype=np.float32)  # not a label this segmentation model produces
+            save_item_bank(bank_items)
+            outfit_vector = np.concatenate([top_emb, bottom_emb, shoes_emb, outerwear_emb])
     else:
         top_emb = get_image_embedding_and_bank(top, "top", label=label_clean)
         bottom_emb = get_image_embedding_and_bank(bottom, "pants", label=label_clean)
@@ -427,11 +696,14 @@ async def add_fit(
 
     status = train_fit_brain(X_memory, y_memory)
 
-    return {
+    response = {
         "status": f"Outfit recorded as {label_clean.upper()}",
         "engine_message": status,
         "total_dataset_samples": len(y_memory),
     }
+    if detected_regions is not None:
+        response["detected_regions"] = detected_regions
+    return response
 
 
 @app.post("/generate-outfit-from-top", tags=["Core Matching Engine"])
@@ -447,80 +719,144 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
         bank_items = load_item_bank()  # loaded once, reused for both slots below
         inventory.pants = resolve_candidates(inventory.pants, inventory.pants_bank_category, bank_items)
         inventory.shoes = resolve_candidates(inventory.shoes, inventory.shoes_bank_category, bank_items)
-        # Bank items carry a precomputed embedding (see process_image_for_bank) -
-        # only items missing one (older bank entries from before this existed)
-        # fall through to being decoded + encoded fresh below.
+        # Bank items carry a precomputed embedding + color palette (see
+        # _encode_and_shrink_for_bank / color_palette) - only items
+        # missing one (older bank entries from before these existed) fall
+        # through to being decoded + encoded/read fresh below.
         bank_embedding_cache = {i["id"]: i["embedding"] for i in bank_items if "embedding" in i}
+        bank_palette_cache = {i["id"]: i["palette"] for i in bank_items if "palette" in i}
 
-        top_image = Image.open(io.BytesIO(await file.read())).convert("RGB")
+        top_image = open_image(await file.read())
+        top_image = crop_to_garment(top_image, "top")
         top_embedding = model.encode(top_image)
+        top_palette = color_palette(top_image)
 
         # Load your separate custom trained brains if they exist
-        color_clf = pickle.load(open("color_model.pkl", "rb")) if os.path.exists("color_model.pkl") else None
         sil_clf = pickle.load(open("silhouette_model.pkl", "rb")) if os.path.exists("silhouette_model.pkl") else None
         fit_clf = pickle.load(open(FIT_MODEL_FILE, "rb")) if os.path.exists(FIT_MODEL_FILE) else None
 
-        # 1. Base match for pants - photo if the item has one, else its
-        # text description. Items with neither just score 0 and rank last.
-        # Batched: every pants photo is decoded once and run through CLIP
-        # in a single call for the whole category, not one call per item.
-        ranked_pants = []
-        pants_emb_by_id = {}
-        pants_is_image_by_id = {}
-        pants_results = get_items_embeddings_for_matching(inventory.pants, bank_embedding_cache)
-        for p, (emb, is_image) in zip(inventory.pants, pants_results):
-            pants_emb_by_id[p.id] = emb
-            pants_is_image_by_id[p.id] = is_image
-            score = float(util.cos_sim(top_embedding, emb)) if emb is not None else 0.0
-            ranked_pants.append({"id": p.id, "description": p.description, "match_score": score})
+        # Score every pants+shoes pairing jointly instead of picking pants
+        # by raw top-similarity alone and only then bringing the trained
+        # brains in for shoes - that left pants ranking blind to actual
+        # outfit compatibility, so whichever pants item was just visually
+        # closest to the top always won regardless of what color_clf/
+        # sil_clf/fit_clf thought of the resulting outfit. Batched: every
+        # photo is decoded once, and every classifier is called once
+        # across the whole pants x shoes grid, not once per pair.
+        pants_results = get_items_embeddings_for_matching(inventory.pants, "pants", bank_embedding_cache, bank_palette_cache)
+        shoes_results = get_items_embeddings_for_matching(inventory.shoes, "shoes", bank_embedding_cache, bank_palette_cache)
+
+        def _stack(results):
+            n = len(results)
+            embs = np.zeros((n, 512))
+            valid = np.zeros(n, dtype=bool)
+            is_image = np.zeros(n, dtype=bool)
+            color_sim = np.zeros(n)  # 0 (neutral) when there's no color to compare (text-only items)
+            for i, (emb, img, palette) in enumerate(results):
+                if emb is not None:
+                    embs[i] = emb
+                    valid[i] = True
+                    is_image[i] = img
+                if palette is not None:
+                    color_sim[i] = palette_similarity(top_palette, palette)
+            return embs, valid, is_image, color_sim
+
+        def _cos_to_top(M):
+            norms = np.linalg.norm(M, axis=1)
+            norms[norms == 0] = 1  # avoid div-by-zero; those rows are masked to 0 anyway
+            return (M @ top_embedding) / (norms * np.linalg.norm(top_embedding))
+
+        P, pants_valid, pants_is_image, pants_color_sim = _stack(pants_results)
+        S, shoes_valid, shoes_is_image, shoes_color_sim = _stack(shoes_results)
+        Np, Ns = len(inventory.pants), len(inventory.shoes)
+
+        pants_scores = np.zeros(Np)
+        shoes_scores = np.zeros(Ns)
+
+        if Ns == 0:
+            # Nothing to pair pants against - rank by raw top-similarity
+            # plus how well its color reads against the top, same as
+            # before any of the trained brains existed (they all need a
+            # shoe in the picture too).
+            pants_scores = (_cos_to_top(P) + pants_color_sim * 1.5) * pants_valid if Np else pants_scores
+        else:
+            # Real pants candidates pair against every shoe. With none
+            # supplied, fall back to a single zero-padded virtual pants row
+            # (mirrors the old best_pants_emb=zeros default) so shoes still
+            # get scored by color_clf/sil_clf even with no pants in play.
+            if Np:
+                P_eff, valid_eff, is_image_eff, pants_color_sim_eff = P, pants_valid, pants_is_image, pants_color_sim
+            else:
+                P_eff, valid_eff, is_image_eff = np.zeros((1, 512)), np.array([True]), np.array([False])
+                pants_color_sim_eff = np.zeros(1)  # no real pants candidate to read a color off of
+            Np_eff = P_eff.shape[0]
+
+            pants_sim = _cos_to_top(P_eff)
+            shoes_sim = _cos_to_top(S)
+            combo_score = pants_sim[:, None] + shoes_sim[None, :]
+
+            # Explicit color match against the top - CLIP similarity alone
+            # can rate a black shoe as a fine match for a white top based
+            # on style/shape, so this gives ranking a direct, reliable
+            # sense of color. Supersedes color_model.pkl entirely: that
+            # classifier was trained on 4 hand-written examples and never
+            # grew from real ratings (unlike fit_model.pkl), so it was
+            # pure noise sitting alongside a much more reliable signal.
+            combo_score += pants_color_sim_eff[:, None] * 1.5 + shoes_color_sim[None, :] * 1.5
+
+            # silhouette_model and fit_model were both trained with a real
+            # "bottom" embedding in that slot, so they score every actual
+            # pants+shoes pairing rather than a fixed one.
+            if sil_clf or fit_clf:
+                n = Np_eff * Ns
+                combo_vec = np.concatenate([
+                    np.tile(top_embedding, (n, 1)),
+                    np.repeat(P_eff, Ns, axis=0),
+                    np.tile(S, (Np_eff, 1)),
+                    np.zeros((n, 512)),
+                ], axis=1)
+                if sil_clf:
+                    combo_score += sil_clf.predict_proba(combo_vec)[:, 1].reshape(Np_eff, Ns) * 1.5
+                if fit_clf:
+                    # fit_model.pkl always requires a real shoe photo - text
+                    # descriptions live in a different part of CLIP's space
+                    # than photos, so scoring one with an image-trained
+                    # model is out-of-distribution input. Pants only needs
+                    # to be a real photo when real pants candidates are
+                    # actually in play (Np>0); the zero-padded virtual row
+                    # used when no pants are supplied isn't actually out-
+                    # of-distribution for this model - /add-fit itself
+                    # zero-pads the same way whenever a rating skips the
+                    # pants slot, so fit_clf has genuinely trained on that
+                    # exact pattern. Requiring a real pants photo here too
+                    # was silently zeroing out fit_clf's entire contribution
+                    # for shoes-only matching, meaning good/bad ratings had
+                    # no effect on shoe ranking at all whenever no pants
+                    # were supplied.
+                    pants_ok = is_image_eff if Np else np.ones(Np_eff, dtype=bool)
+                    fit_mask = pants_ok[:, None] & shoes_is_image[None, :]
+                    combo_score += fit_clf.predict_proba(combo_vec)[:, 1].reshape(Np_eff, Ns) * fit_mask * 1.5
+
+            # Items with neither a photo nor a description have nothing to
+            # score them against - keep them at a flat 0 no matter what
+            # they'd be paired with.
+            combo_score *= valid_eff[:, None] * shoes_valid[None, :]
+
+            best_i, best_j = np.unravel_index(np.argmax(combo_score), combo_score.shape)
+            shoes_scores = combo_score[best_i, :]
+            if Np:
+                pants_scores = combo_score[:, best_j]
+
+        ranked_pants = [
+            {"id": p.id, "description": p.description, "match_score": float(pants_scores[i])}
+            for i, p in enumerate(inventory.pants)
+        ]
         ranked_pants.sort(key=lambda x: x["match_score"], reverse=True)
-        pants_by_id = {p.id: p for p in inventory.pants}
-        best_pants_item = pants_by_id[ranked_pants[0]["id"]] if ranked_pants else None
-        best_pants_emb = pants_emb_by_id.get(best_pants_item.id) if best_pants_item else None
-        best_pants_is_image = pants_is_image_by_id.get(best_pants_item.id, False) if best_pants_item else False
-        if best_pants_emb is None:
-            best_pants_emb = np.zeros(512)
 
-        # 2. Advanced match for shoes using your custom training files.
-        # Same batching - one CLIP call for every shoe photo in the
-        # category, which is what actually made a 64-item bank slow
-        # before (64 sequential single-image .encode() calls).
-        ranked_shoes = []
-        shoes_results = get_items_embeddings_for_matching(inventory.shoes, bank_embedding_cache)
-        for s, (shoe_emb, shoe_is_image) in zip(inventory.shoes, shoes_results):
-            if shoe_emb is None:
-                # Nothing to embed this shoe with - baseline-only score of 0.
-                ranked_shoes.append({"id": s.id, "description": s.description, "match_score": 0.0})
-                continue
-
-            # color_model was trained with the pants slot always zeroed out
-            # (train_color_clash.py only ever fills top + shoes), so it has
-            # to be scored on that same zero-padded layout here - feeding it
-            # a real pants embedding would be out-of-distribution input.
-            # silhouette_model was trained with a real "bottom" embedding in
-            # that slot, so it gets the actual best_pants_emb.
-            color_vec = np.concatenate([top_embedding, np.zeros(512), shoe_emb, np.zeros(512)]).reshape(1, -1)
-            sil_vec = np.concatenate([top_embedding, best_pants_emb, shoe_emb, np.zeros(512)]).reshape(1, -1)
-
-            # Combine scores from both custom brains
-            score = float(util.cos_sim(top_embedding, shoe_emb))  # baseline
-            if color_clf:
-                score += float(color_clf.predict_proba(color_vec)[0][1]) * 1.5
-            if sil_clf:
-                score += float(sil_clf.predict_proba(sil_vec)[0][1]) * 1.5
-
-            # fit_model.pkl only ever saw real photo embeddings during
-            # /add-fit, so only apply it when the pants/shoes items in this
-            # inventory carry a real photo too - otherwise skip it rather
-            # than score a text embedding with an image-trained model.
-            # Reuses the embeddings already computed above instead of
-            # re-decoding + re-encoding the same photos again.
-            if fit_clf and best_pants_is_image and shoe_is_image:
-                fit_vec = np.concatenate([top_embedding, best_pants_emb, shoe_emb, np.zeros(512)]).reshape(1, -1)
-                score += float(fit_clf.predict_proba(fit_vec)[0][1]) * 1.5
-
-            ranked_shoes.append({"id": s.id, "description": s.description, "match_score": score})
-
+        ranked_shoes = [
+            {"id": s.id, "description": s.description, "match_score": float(shoes_scores[i])}
+            for i, s in enumerate(inventory.shoes)
+        ]
         ranked_shoes.sort(key=lambda x: x["match_score"], reverse=True)
 
         return {
@@ -530,6 +866,8 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
                 "best_shoes_match": ranked_shoes if ranked_shoes else None
             }
         }
+    except HTTPException:
+        raise  # already has the right status code (e.g. 400 for bad input) - don't flatten it to a 500
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Engine error: {str(e)}")
 
