@@ -14,6 +14,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.cluster import KMeans
+from scipy import ndimage
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -32,7 +33,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["POST", "GET"],
+    allow_methods=["POST", "GET", "PATCH"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
 
@@ -77,20 +78,71 @@ def _segment_pixel_labels(img: Image.Image) -> np.ndarray:
     upsampled = torch.nn.functional.interpolate(logits, size=img.size[::-1], mode="bilinear", align_corners=False)
     return upsampled.argmax(dim=1)[0].numpy()
 
-def _crop_to_labels(img: Image.Image, pixel_labels: np.ndarray, label_names: list, pad_frac: float = 0.04):
-    """Isolates every pixel matching any of label_names and crops to its
-    bounding box, or None if that garment wasn't found in this photo at
-    all. A bounding box alone isn't enough - e.g. arms folded across a
-    torso mean the "pants" box can still overlap the "upper-clothes" box,
-    so pixels outside the mask (other garments, skin, background) get
-    painted out to a neutral white first. Without this, a "pants" crop
-    could still show a chunk of shirt or hand inside its box, which
-    contaminates both the embedding and what shows up in the UI as "the
-    pants" - each garment's check should only ever see that garment."""
+def _skin_mask(img: Image.Image) -> np.ndarray:
+    """Rough YCbCr skin-tone detector, used as a safety net for where the
+    segmentation model itself mislabels skin as garment - e.g. hands
+    folded across the stomach, or bare neck at an open collar, sometimes
+    get predicted as "upper-clothes" outright, which is a labeling error
+    no amount of eroding/cleaning up the mask's boundary can fix, since
+    it's not a boundary problem. YCbCr separates color from brightness,
+    which makes a fixed skin-tone range hold up across lighting much
+    better than the same kind of check would in plain RGB. Trade-off: a
+    genuinely tan/beige garment can lose some pixels to this too - given
+    the ask was "not skin, not background, no noise," erring toward
+    cutting too much rather than letting real skin through is the
+    intended trade."""
+    arr = np.array(img.convert("YCbCr"), dtype=np.float32)
+    y, cb, cr = arr[..., 0], arr[..., 1], arr[..., 2]
+    return (y > 40) & (cb >= 77) & (cb <= 127) & (cr >= 133) & (cr <= 173)
+
+def _crop_to_labels(img: Image.Image, pixel_labels: np.ndarray, label_names: list, pad_frac: float = 0.02, erode_px: int = 4):
+    """Isolates every pixel matching any of label_names and crops tight to
+    it, or None if that garment wasn't found in this photo at all.
+
+    Four things keep this from leaking anything but the garment itself:
+    1. A skin-tone filter (_skin_mask) drops pixels the model itself
+       mislabeled as garment - hands folded over the stomach or bare neck
+       at an open collar sometimes get predicted as "upper-clothes"
+       outright, which no amount of cleaning up the mask's boundary can
+       fix, since it's a labeling error, not a boundary problem.
+    2. Stray misclassified pixels (a normal segmentation-model artifact -
+       e.g. a shadow far from the body briefly reads as "pants") get
+       dropped by keeping only the single largest connected blob of the
+       mask, instead of every matching pixel anywhere in the photo. A
+       handful of stray pixels off in the background would otherwise blow
+       the bounding box out to include everything between them and the
+       real garment.
+    3. The mask is eroded inward a couple pixels before anything else
+       happens - the model's prediction is upsampled from a much lower
+       internal resolution, so the outermost ring of "garment" pixels is
+       the blurriest and most likely to actually be skin, jewelry (a
+       chain has no label of its own, so it gets absorbed into whichever
+       real class is nearest), or background bleeding through at the
+       boundary.
+    4. Whatever's left outside the (skin-filtered, eroded, largest-blob)
+       mask - other garments, skin, walls, chains, anything - gets
+       painted a neutral white, and padding around the crop is kept
+       minimal, so the result is zoomed in tight on the garment itself
+       rather than a loose box that happens to contain it."""
     ids = [_seg_label2id[n] for n in label_names if n in _seg_label2id]
     mask = np.isin(pixel_labels, ids)
     if not mask.any():
         return None
+
+    skin_free = mask & ~_skin_mask(img)
+    if skin_free.any():  # don't wipe out a garment that's genuinely skin-toned entirely
+        mask = skin_free
+
+    labeled, num_blobs = ndimage.label(mask)
+    if num_blobs > 1:
+        sizes = ndimage.sum(mask, labeled, range(1, num_blobs + 1))
+        mask = labeled == (int(np.argmax(sizes)) + 1)
+
+    if erode_px > 0:
+        eroded = ndimage.binary_erosion(mask, iterations=erode_px)
+        if eroded.any():  # don't erode away a thin/small garment (e.g. a belt) entirely
+            mask = eroded
+
     ys, xs = np.where(mask)
     y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
     h, w = pixel_labels.shape
@@ -160,13 +212,42 @@ def color_palette(img: Image.Image, k: int = COLOR_PALETTE_SIZE) -> list:
     order = np.argsort(-weights)
     return [{"color": labels.cluster_centers_[i].tolist(), "weight": float(weights[i])} for i in order]
 
+def _rgb_to_lab(rgb) -> np.ndarray:
+    """Standard sRGB (D65) -> CIE LAB conversion, vectorized over an
+    (..., 3) array of 0-255 RGB values. Plain RGB Euclidean distance
+    doesn't track how different two colors actually LOOK to a person -
+    the RGB channels don't correspond to how the eye weights brightness
+    vs. color, so two visually-close colors can sit far apart in raw RGB
+    while two visually-different ones sit close. LAB is built specifically
+    so Euclidean distance in this space (delta-E) approximates perceived
+    difference much more closely."""
+    arr = np.asarray(rgb, dtype=np.float64) / 255.0
+    arr = np.where(arr > 0.04045, ((arr + 0.055) / 1.055) ** 2.4, arr / 12.92)
+
+    srgb_to_xyz = np.array([
+        [0.4124564, 0.3575761, 0.1804375],
+        [0.2126729, 0.7151522, 0.0721750],
+        [0.0193339, 0.1191920, 0.9503041],
+    ])
+    xyz = arr @ srgb_to_xyz.T
+
+    xyz = xyz / np.array([0.95047, 1.0, 1.08883])  # normalize by the D65 reference white
+    xyz = np.where(xyz > 0.008856, np.cbrt(xyz), (7.787 * xyz) + 16 / 116)
+
+    x, y, z = xyz[..., 0], xyz[..., 1], xyz[..., 2]
+    return np.stack([(116 * y) - 16, 500 * (x - y), 200 * (y - z)], axis=-1)
+
+LAB_DISTANCE_CEILING = 150.0  # calibrated so black-vs-white (delta-E 100) and
+# most realistic garment-color pairs land well inside 0-1; only near the
+# most extreme, fully-saturated opposite hues does similarity clamp to 0.
+
 def _rgb_similarity(color_a: list, color_b: list) -> float:
-    """0-1 score, 1 = identical color. Euclidean distance in plain RGB is a
-    crude perceptual metric but is more than enough to tell "black" from
-    "white" from "green" - the actual failure mode being fixed here, not
-    fine-grained color science."""
-    dist = float(np.linalg.norm(np.array(color_a) - np.array(color_b)))
-    return 1.0 - (dist / 441.673)  # 441.673 = sqrt(3 * 255^2), max possible RGB distance
+    """0-1 score, 1 = perceptually identical color. Compares in CIE LAB
+    space (delta-E) rather than raw RGB distance, so "how similar do these
+    look" tracks human color perception instead of a flat per-channel
+    difference."""
+    delta_e = float(np.linalg.norm(_rgb_to_lab(np.array(color_a)) - _rgb_to_lab(np.array(color_b))))
+    return max(0.0, 1.0 - delta_e / LAB_DISTANCE_CEILING)
 
 def palette_similarity(palette_a: list, palette_b: list) -> float:
     """Weighted best-match between two color palettes: each color in A is
@@ -418,6 +499,30 @@ def get_bank(category: Optional[str] = None, label: Optional[str] = None, _: Non
     return {"count": len(items), "categories": categories, "items": items}
 
 
+@app.patch("/bank/{item_id}", tags=["Item Bank"])
+def update_bank_item(item_id: int, label: Optional[str] = Form(None), description: Optional[str] = Form(None), _: None = Depends(require_api_key)):
+    """Hand-edit a single bank item's label and/or description - e.g. from
+    a browsing/sorting UI, correcting a bulk zip upload's auto-generated
+    description, or manually labeling items that came in unrated."""
+    if label is not None:
+        label_clean = label.strip().lower()
+        if label_clean not in ("good", "bad", "unrated", ""):
+            raise HTTPException(status_code=400, detail="label must be 'good', 'bad', 'unrated', or empty")
+
+    items = load_item_bank()
+    item = next((i for i in items if i["id"] == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"No bank item with id {item_id}")
+
+    if label is not None:
+        item["label"] = None if label_clean in ("", "unrated") else label_clean
+    if description is not None:
+        item["description"] = description
+
+    save_item_bank(items)
+    return {"id": item["id"], "category": item["category"], "description": item["description"], "label": item.get("label")}
+
+
 def resolve_candidates(explicit_items: List[ClothingItem], bank_category: Optional[str], bank_items: list) -> List[ClothingItem]:
     """Merges any explicitly-supplied items with every item from the given
     bank category, pulling their photo data straight from the already-
@@ -439,9 +544,9 @@ def resolve_candidates(explicit_items: List[ClothingItem], bank_category: Option
 
 # ---------------------------------------------------------------------
 # Live "general fit" brain: trained at runtime from outfits you rate via
-# /add-fit, independent of the curated color_model.pkl / silhouette_model.pkl
-# scripts. Uses real photo embeddings throughout, both at training time
-# and (when available) at inference time, to keep the two consistent.
+# /add-fit, independent of the curated silhouette_model.pkl script. Uses
+# real photo embeddings throughout, both at training time and (when
+# available) at inference time, to keep the two consistent.
 # ---------------------------------------------------------------------
 FIT_MODEL_FILE = "fit_model.pkl"
 FIT_DATA_FILE = "fit_training_data.pkl"
@@ -739,9 +844,9 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
         # by raw top-similarity alone and only then bringing the trained
         # brains in for shoes - that left pants ranking blind to actual
         # outfit compatibility, so whichever pants item was just visually
-        # closest to the top always won regardless of what color_clf/
-        # sil_clf/fit_clf thought of the resulting outfit. Batched: every
-        # photo is decoded once, and every classifier is called once
+        # closest to the top always won regardless of what the color match,
+        # sil_clf, or fit_clf thought of the resulting outfit. Batched:
+        # every photo is decoded once, and every classifier is called once
         # across the whole pants x shoes grid, not once per pair.
         pants_results = get_items_embeddings_for_matching(inventory.pants, "pants", bank_embedding_cache, bank_palette_cache)
         shoes_results = get_items_embeddings_for_matching(inventory.shoes, "shoes", bank_embedding_cache, bank_palette_cache)
@@ -783,7 +888,7 @@ async def generate_outfit_from_top(inventory_json: str = Form(...), file: Upload
             # Real pants candidates pair against every shoe. With none
             # supplied, fall back to a single zero-padded virtual pants row
             # (mirrors the old best_pants_emb=zeros default) so shoes still
-            # get scored by color_clf/sil_clf even with no pants in play.
+            # get scored by sil_clf/fit_clf even with no pants in play.
             if Np:
                 P_eff, valid_eff, is_image_eff, pants_color_sim_eff = P, pants_valid, pants_is_image, pants_color_sim
             else:
@@ -881,7 +986,9 @@ def _read_json_if_exists(path):
 
 @app.get("/stats", tags=["AI Style Training"])
 def get_stats(_: None = Depends(require_api_key)):
-    """How much data each of the three brains was actually trained on."""
+    """How much data each brain was actually trained on. color_model.pkl
+    is deliberately absent here - see palette_similarity's docstring in
+    this file for why it was retired in favor of direct color matching."""
     fit_X, fit_y = load_fit_training_data()
     fit_good = sum(fit_y)
     fit_history = []
@@ -898,7 +1005,6 @@ def get_stats(_: None = Depends(require_api_key)):
             "latest_holdout_accuracy": fit_history[-1]["holdout_accuracy"] if fit_history else None,
             "holdout_checks_logged": len(fit_history),
         },
-        "color_model": _read_json_if_exists("color_model_meta.json") or {"trained": os.path.exists("color_model.pkl"), "note": "meta file missing - rerun train_color_clash.py to record counts"},
         "silhouette_model": _read_json_if_exists("silhouette_model_meta.json") or {"trained": os.path.exists("silhouette_model.pkl"), "note": "meta file missing - rerun train_silhouette.py to record counts"},
         "item_bank": _bank_stats(),
     }

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FIT//LAB - Item Bank Browser</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --panel: #161616;
+    --border: #2a2a2a;
+    --accent: #ff0055;
+    --text: #f2f2f2;
+    --muted: #999;
+    --good: #1db954;
+    --bad: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 {
+    color: var(--accent);
+    letter-spacing: 1px;
+    font-size: 20px;
+    margin: 0 0 20px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  label:first-child { margin-top: 0; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  select {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 200px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 16px;
+    font-size: 14px;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { margin-top: 10px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+
+  #toolbar { display: none; }
+  #summary { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card.label-good { border-color: var(--good); }
+  .card.label-bad { border-color: var(--bad); }
+  .card img {
+    width: 100%;
+    height: 180px;
+    object-fit: contain;
+    background: #000;
+    display: block;
+  }
+  .card-body { padding: 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .card-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+  .card-desc {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 5px;
+    font-size: 13px;
+  }
+  .card-label-row { display: flex; gap: 6px; align-items: center; }
+  .card-label-row select { font-size: 13px; padding: 6px 8px; }
+  .save-state { font-size: 11px; color: var(--muted); min-width: 44px; text-align: right; }
+  .save-state.saved { color: var(--good); }
+  .save-state.error { color: var(--bad); }
+  #empty { color: var(--muted); font-size: 14px; padding: 20px 0; }
+</style>
+</head>
+<body>
+
+<h1>&#9889; FIT//LAB Item Bank Browser</h1>
+
+<div class="panel">
+  <div class="row">
+    <div>
+      <label>Server URL</label>
+      <input type="text" id="serverUrl" value="http://127.0.0.1:8000">
+    </div>
+    <div>
+      <label>X-API-Key</label>
+      <input type="password" id="apiKey" placeholder="paste your FASHION_AI_API_KEY">
+    </div>
+  </div>
+  <button type="button" id="loadBtn" onclick="loadBank()">Load Bank From Server</button>
+  <div id="status"></div>
+</div>
+
+<div class="panel" id="toolbar">
+  <div class="row">
+    <div>
+      <label>Category</label>
+      <select id="categoryFilter" onchange="render()"><option value="">All categories</option></select>
+    </div>
+    <div>
+      <label>Label</label>
+      <select id="labelFilter" onchange="render()">
+        <option value="">All labels</option>
+        <option value="good">Good</option>
+        <option value="bad">Bad</option>
+        <option value="unrated">Unrated</option>
+      </select>
+    </div>
+    <div>
+      <label>Sort by</label>
+      <select id="sortBy" onchange="render()">
+        <option value="added_desc">Newest first</option>
+        <option value="added_asc">Oldest first</option>
+        <option value="category">Category</option>
+        <option value="label">Label</option>
+        <option value="description">Description (A-Z)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div id="summary"></div>
+<div id="empty" style="display:none">No items match the current filters.</div>
+<div class="grid" id="grid"></div>
+
+<script>
+let bankItems = [];
+
+function b64ToDataUrl(b64) {
+  return "data:image/jpeg;base64," + b64;
+}
+
+async function loadBank() {
+  const statusEl = document.getElementById("status");
+  const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
+  const apiKey = document.getElementById("apiKey").value.trim();
+  if (!apiKey) { statusEl.textContent = "Enter your X-API-Key first."; return; }
+
+  const btn = document.getElementById("loadBtn");
+  btn.disabled = true;
+  statusEl.textContent = "Loading bank...";
+  try {
+    const resp = await fetch(serverUrl + "/bank", { headers: { "X-API-Key": apiKey } });
+    const body = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error ${resp.status}: ${body.detail || JSON.stringify(body)}`;
+      return;
+    }
+
+    bankItems = body.items;
+
+    const categorySelect = document.getElementById("categoryFilter");
+    categorySelect.innerHTML = '<option value="">All categories</option>' +
+      body.categories.map(c => `<option value="${c}">${c}</option>`).join("");
+
+    document.getElementById("toolbar").style.display = "block";
+    statusEl.textContent = `Loaded ${body.count} items across ${body.categories.length} categories.`;
+    render();
+  } catch (err) {
+    statusEl.textContent = "Failed to load bank: " + err.message +
+      "\n(Check the server is running, and that ALLOWED_ORIGINS includes the origin this page is served from.)";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function render() {
+  const categoryFilter = document.getElementById("categoryFilter").value;
+  const labelFilter = document.getElementById("labelFilter").value;
+  const sortBy = document.getElementById("sortBy").value;
+
+  let items = bankItems.filter(i => {
+    if (categoryFilter && i.category.toLowerCase() !== categoryFilter.toLowerCase()) return false;
+    if (labelFilter === "unrated" && i.label) return false;
+    if (labelFilter && labelFilter !== "unrated" && i.label !== labelFilter) return false;
+    return true;
+  });
+
+  const labelRank = { good: 0, bad: 1 };
+  items = items.slice().sort((a, b) => {
+    switch (sortBy) {
+      case "added_asc": return (a.added_at || "").localeCompare(b.added_at || "");
+      case "category": return a.category.localeCompare(b.category) || a.id - b.id;
+      case "label": return (labelRank[a.label] ?? 2) - (labelRank[b.label] ?? 2) || a.id - b.id;
+      case "description": return (a.description || "").localeCompare(b.description || "");
+      case "added_desc":
+      default: return (b.added_at || "").localeCompare(a.added_at || "");
+    }
+  });
+
+  document.getElementById("summary").textContent =
+    `Showing ${items.length} of ${bankItems.length} items`;
+  document.getElementById("empty").style.display = items.length ? "none" : "block";
+
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  items.forEach(item => grid.appendChild(renderCard(item)));
+}
+
+function renderCard(item) {
+  const card = document.createElement("div");
+  card.className = "card" + (item.label === "good" ? " label-good" : item.label === "bad" ? " label-bad" : "");
+
+  const img = document.createElement("img");
+  img.src = b64ToDataUrl(item.image_base64);
+  card.appendChild(img);
+
+  const bodyEl = document.createElement("div");
+  bodyEl.className = "card-body";
+
+  const meta = document.createElement("div");
+  meta.className = "card-meta";
+  meta.innerHTML = `<span>#${item.id} - ${item.category}</span><span>${item.source || ""}</span>`;
+  bodyEl.appendChild(meta);
+
+  const descInput = document.createElement("input");
+  descInput.className = "card-desc";
+  descInput.type = "text";
+  descInput.value = item.description || "";
+
+  const labelRow = document.createElement("div");
+  labelRow.className = "card-label-row";
+  const labelSelect = document.createElement("select");
+  labelSelect.innerHTML = `
+    <option value="unrated"${!item.label ? " selected" : ""}>Unrated</option>
+    <option value="good"${item.label === "good" ? " selected" : ""}>Good</option>
+    <option value="bad"${item.label === "bad" ? " selected" : ""}>Bad</option>
+  `;
+  const saveState = document.createElement("span");
+  saveState.className = "save-state";
+  labelRow.appendChild(labelSelect);
+  labelRow.appendChild(saveState);
+
+  async function save() {
+    saveState.textContent = "saving...";
+    saveState.className = "save-state";
+    const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
+    const apiKey = document.getElementById("apiKey").value.trim();
+    try {
+      const form = new URLSearchParams();
+      form.set("label", labelSelect.value);
+      form.set("description", descInput.value);
+      const resp = await fetch(`${serverUrl}/bank/${item.id}`, {
+        method: "PATCH",
+        headers: { "X-API-Key": apiKey, "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
+      const updated = await resp.json();
+      if (!resp.ok) throw new Error(updated.detail || JSON.stringify(updated));
+
+      // Keep the in-memory copy consistent so re-sorting/filtering after
+      // an edit reflects the change without a full reload.
+      item.label = updated.label;
+      item.description = updated.description;
+      card.className = "card" + (item.label === "good" ? " label-good" : item.label === "bad" ? " label-bad" : "");
+
+      saveState.textContent = "saved";
+      saveState.className = "save-state saved";
+      setTimeout(() => { saveState.textContent = ""; }, 1500);
+    } catch (err) {
+      saveState.textContent = "error";
+      saveState.className = "save-state error";
+      saveState.title = err.message;
+    }
+  }
+
+  labelSelect.addEventListener("change", save);
+  descInput.addEventListener("change", save);
+
+  bodyEl.appendChild(descInput);
+  bodyEl.appendChild(labelRow);
+  card.appendChild(bodyEl);
+  return card;
+}
+</script>
+
+</body>
+</html>
