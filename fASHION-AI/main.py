@@ -59,6 +59,14 @@ GARMENT_SEG_MODEL = "mattmdjaga/segformer_b2_clothes"
 _seg_processor = SegformerImageProcessor.from_pretrained(GARMENT_SEG_MODEL)
 _seg_model = AutoModelForSemanticSegmentation.from_pretrained(GARMENT_SEG_MODEL)
 _seg_model.eval()
+# The model's own default (512x512) blurs boundaries enough to leave
+# visible rims of skin/background around garment edges once cropping
+# actually zooms in on them - 768 cuts that down substantially (~2x the
+# compute per photo, accepted deliberately) for meaningfully cleaner
+# crops. It doesn't fix everything: things this model has no label for at
+# all (jewelry, e.g.) get absorbed into a nearby class regardless of
+# resolution - that's a label-coverage gap, not a precision one.
+_SEG_INPUT_SIZE = {"height": 768, "width": 768}
 _seg_label2id = {name.lower(): idx for idx, name in _seg_model.config.id2label.items()}
 # Only labels we have an inventory slot for - Hat/Hair/Face/Bag/etc are
 # real segments this model finds but nothing in WardrobeInventory maps to
@@ -71,8 +79,9 @@ GARMENT_LABEL_GROUPS = {
 
 def _segment_pixel_labels(img: Image.Image) -> np.ndarray:
     """Per-pixel label id for every pixel in img, upsampled back to img's
-    original resolution (the model itself runs at a fixed internal size)."""
-    inputs = _seg_processor(images=img, return_tensors="pt")
+    original resolution (the model itself runs at a fixed internal size -
+    see _SEG_INPUT_SIZE)."""
+    inputs = _seg_processor(images=img, return_tensors="pt", size=_SEG_INPUT_SIZE)
     with torch.no_grad():
         logits = _seg_model(**inputs).logits
     upsampled = torch.nn.functional.interpolate(logits, size=img.size[::-1], mode="bilinear", align_corners=False)
