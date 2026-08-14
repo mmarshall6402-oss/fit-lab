@@ -109,10 +109,20 @@
     font-size: 13px;
   }
   .card-label-row { display: flex; gap: 6px; align-items: center; }
-  .card-label-row select { font-size: 13px; padding: 6px 8px; }
+  .card-label-row select { font-size: 13px; padding: 6px 8px; flex: 1; }
   .save-state { font-size: 11px; color: var(--muted); min-width: 44px; text-align: right; }
   .save-state.saved { color: var(--good); }
   .save-state.error { color: var(--bad); }
+  .delete-btn {
+    margin-top: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: normal;
+    background: transparent;
+    color: var(--bad);
+    border: 1px solid var(--bad);
+  }
+  .delete-btn:hover { background: var(--bad); color: #fff; }
   #empty { color: var(--muted); font-size: 14px; padding: 20px 0; }
 </style>
 </head>
@@ -311,8 +321,38 @@ function renderCard(item) {
   labelSelect.addEventListener("change", save);
   descInput.addEventListener("change", save);
 
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "delete-btn";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.addEventListener("click", async () => {
+    if (!confirm(`Delete item #${item.id} (${item.description || item.category})? This can't be undone from here.`)) return;
+
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = "Deleting...";
+    const serverUrl = document.getElementById("serverUrl").value.replace(/\/$/, "");
+    const apiKey = document.getElementById("apiKey").value.trim();
+    try {
+      const resp = await fetch(`${serverUrl}/bank/${item.id}`, {
+        method: "DELETE",
+        headers: { "X-API-Key": apiKey },
+      });
+      const body = await resp.json();
+      if (!resp.ok) throw new Error(body.detail || JSON.stringify(body));
+
+      bankItems = bankItems.filter(i => i.id !== item.id);
+      card.remove();
+      document.getElementById("summary").textContent = `Showing ${document.getElementById("grid").children.length} of ${bankItems.length} items`;
+    } catch (err) {
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = "Delete";
+      alert("Failed to delete: " + err.message);
+    }
+  });
+
   bodyEl.appendChild(descInput);
   bodyEl.appendChild(labelRow);
+  bodyEl.appendChild(deleteBtn);
   card.appendChild(bodyEl);
   return card;
 }

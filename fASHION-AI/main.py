@@ -33,7 +33,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["POST", "GET", "PATCH"],
+    allow_methods=["POST", "GET", "PATCH", "DELETE"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
 
@@ -530,6 +530,19 @@ def update_bank_item(item_id: int, label: Optional[str] = Form(None), descriptio
 
     save_item_bank(items)
     return {"id": item["id"], "category": item["category"], "description": item["description"], "label": item.get("label")}
+
+
+@app.delete("/bank/{item_id}", tags=["Item Bank"])
+def delete_bank_item(item_id: int, _: None = Depends(require_api_key)):
+    """Permanently removes one item from the bank - e.g. clearing out a
+    bad upload, a test artifact, or a near-duplicate the automatic dedup
+    threshold didn't quite catch. Not reversible from the API itself."""
+    items = load_item_bank()
+    remaining = [i for i in items if i["id"] != item_id]
+    if len(remaining) == len(items):
+        raise HTTPException(status_code=404, detail=f"No bank item with id {item_id}")
+    save_item_bank(remaining)
+    return {"id": item_id, "deleted": True, "total_bank_size": len(remaining)}
 
 
 def resolve_candidates(explicit_items: List[ClothingItem], bank_category: Optional[str], bank_items: list) -> List[ClothingItem]:

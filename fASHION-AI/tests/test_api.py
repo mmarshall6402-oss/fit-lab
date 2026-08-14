@@ -135,6 +135,34 @@ def test_patch_bank_item_404_for_unknown_id(client, auth_headers, isolated_bank)
     assert resp.status_code == 404
 
 
+# --- DELETE /bank/{item_id} -----------------------------------------------
+
+def test_delete_bank_item_removes_it(client, auth_headers, isolated_bank):
+    _seed_one_item(isolated_bank)
+    resp = client.delete("/bank/1", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"id": 1, "deleted": True, "total_bank_size": 0}
+
+    bank = client.get("/bank", headers=auth_headers).json()
+    assert bank["count"] == 0
+
+
+def test_delete_bank_item_404_for_unknown_id(client, auth_headers, isolated_bank):
+    _seed_one_item(isolated_bank)
+    resp = client.delete("/bank/999", headers=auth_headers)
+    assert resp.status_code == 404
+
+    # the real item must still be there - a 404 delete shouldn't touch anything
+    bank = client.get("/bank", headers=auth_headers).json()
+    assert bank["count"] == 1
+
+
+def test_delete_bank_item_requires_auth(client, isolated_bank):
+    _seed_one_item(isolated_bank)
+    resp = client.delete("/bank/1")
+    assert resp.status_code == 401
+
+
 # --- /generate-outfit-from-top --------------------------------------------
 
 def test_generate_outfit_malformed_image_item_returns_400_not_500(client, auth_headers, isolated_bank):
