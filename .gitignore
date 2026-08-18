@@ -14,3 +14,8 @@ fASHION-AI/color_model_meta.json
 fASHION-AI/silhouette_model_meta.json
 fASHION-AI/fit_dataset/
 fASHION-AI/item_bank.json
+
+# perception pipeline: local worker scratch (raw input, crops, embeddings store)
+fASHION-AI/raw/
+fASHION-AI/crops/
+fASHION-AI/embeddings_store*.jsonl
