@@ -33,7 +33,7 @@ have the backend brute-force the best-scoring combination from your catalog.
 |---|---|
 | **Backend** | Spring Boot 3 (Java 21), Spring Security + JWT, JPA/H2 (Postgres-ready) |
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4 |
-| **AI / matching** | Anthropic (image tagging, style extraction), `sentence-transformers` embedding service (FastAPI) |
+| **AI / matching** | Anthropic (image tagging, style extraction), Python/FastAPI ML service — CLIP embeddings (`sentence-transformers`), garment segmentation (`transformers`/PyTorch), scikit-learn (logistic regression fit-scoring, KMeans color clustering) |
 | **CI/CD** | GitHub Actions (backend deploy, frontend deploy, artifact builds) |
 
 ## Architecture
@@ -110,7 +110,7 @@ Workflow definitions live in [`.github/workflows/`](.github/workflows/): [`deplo
 fitcheck/
 ├── backend/       Spring Boot REST API — catalog, matching, outfit scoring
 ├── frontend/      React + TypeScript UI
-└── fASHION-AI/    Python embedding / tagging service
+└── fASHION-AI/    Python ML service — CLIP embeddings, garment segmentation, fit-scoring model (FastAPI)
 ```
 
 - `backend/` — see [`backend/README.md`](backend/README.md) for config, endpoints, and architecture notes.
