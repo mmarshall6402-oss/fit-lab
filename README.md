@@ -33,7 +33,7 @@ have the backend brute-force the best-scoring combination from your catalog.
 |---|---|
 | **Backend** | Spring Boot 3 (Java 21), Spring Security + JWT, JPA/H2 (Postgres-ready) |
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4 |
-| **AI / matching** | Anthropic (image tagging, style extraction), `sentence-transformers` embedding service (FastAPI) |
+| **AI / matching** | Anthropic (image tagging, style extraction), Python/FastAPI ML service — CLIP embeddings (`sentence-transformers`), garment segmentation (`transformers`/PyTorch), scikit-learn (logistic regression fit-scoring, KMeans color clustering) |
 | **CI/CD** | GitHub Actions (backend deploy, frontend deploy, artifact builds) |
 
 ## Architecture
@@ -110,7 +110,7 @@ Workflow definitions live in [`.github/workflows/`](.github/workflows/): [`deplo
 fitcheck/
 ├── backend/       Spring Boot REST API — catalog, matching, outfit scoring
 ├── frontend/      React + TypeScript UI
-└── fASHION-AI/    Python embedding / tagging service
+└── fASHION-AI/    Python ML service — CLIP embeddings, garment segmentation, fit-scoring model (FastAPI)
 ```
 
 - `backend/` — see [`backend/README.md`](backend/README.md) for config, endpoints, and architecture notes.
@@ -128,6 +128,14 @@ cd frontend && npm install && npm run dev
 
 Open `http://localhost:5173`. The catalog starts empty — add items via the UI or
 `POST /items` / `POST /items/import`.
+
+## Testing
+
+| Suite | Command | Last verified result |
+|---|---|---|
+| Backend (JUnit, Spring Boot Test) | `cd backend && mvn test` | ✅ **38 passed / 0 failed** across 10 test classes (integration tests for admin, attachments, and app bootstrap; unit tests for matching, item, match, outfit, outfit-scoring, and scoring-config services) |
+| fASHION-AI (pytest, FastAPI `TestClient`) | `cd fASHION-AI && pip install -r requirements.txt -r requirements-dev.txt && pytest -q` | `tests/test_api.py`, `test_bank_logic.py`, `test_color.py` — not runnable in this sandboxed session (network policy blocks `huggingface.co`, and `main.py` downloads the CLIP + segmentation model weights at import time); run locally to get real numbers |
+| Frontend | `cd frontend && npm run lint` | No test suite yet — `oxlint` only |
 
 ## How outfit scoring works
 
